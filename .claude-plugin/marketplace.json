@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "living-wiki",
+  "description": "Живая вики: Obsidian-совместимая база знаний и контур саморазвития на markdown",
+  "owner": {
+    "name": "TODO: твой GitHub-ник"
+  },
+  "plugins": [
+    {
+      "name": "living-wiki",
+      "displayName": "Living Wiki",
+      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only)",
+      "source": "."
+    }
+  ]
+}
