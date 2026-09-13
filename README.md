@@ -17,7 +17,7 @@
 ### Claude Code (одна команда, работает сразу в любом проекте)
 
 ```
-/plugin marketplace add <твой-github-ник>/living-wiki
+/plugin marketplace add timurthenix-glitch/living-wiki
 /plugin install living-wiki@living-wiki
 ```
 
@@ -42,7 +42,3 @@
 - Текущая версия бутстрапа — `v0.1` (см. `bootstrap_version` в frontmatter `AGENTS.md` и `SKILL.md`).
 - Версия проекта Claude Code-плагина в `.claude-plugin/plugin.json` следует semver (`0.1.0`) — это требование формата плагина, по сути та же `v0.1`.
 - При обновлении: см. `CHANGELOG.md`. Раздел 2.1 в `AGENTS.md`/`SKILL.md` описывает, как агент обновляет уже существующий проект до новой версии, не трогая накопленные данные пользователя (`wiki/`, `self/`, `journal/`, `log.md`).
-
-## Прежде чем публиковать
-
-Замени плейсхолдеры `TODO` в `.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json` и в файлах-указателях (`https://github.com/TODO/living-wiki`) на реальные имя/ник и ссылку на репозиторий после того, как создашь его на GitHub.
