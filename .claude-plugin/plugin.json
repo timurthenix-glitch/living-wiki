@@ -6,5 +6,6 @@
   "author": {
     "name": "timurthenix-glitch"
   },
-  "repository": "https://github.com/timurthenix-glitch/living-wiki"
+  "repository": "https://github.com/timurthenix-glitch/living-wiki",
+  "license": "MIT"
 }

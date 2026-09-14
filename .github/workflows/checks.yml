@@ -1,0 +1,17 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rule-pointer files are in sync with templates/rule-pointer.md
+        run: bash scripts/check-rule-pointers.sh
+      - name: plugin.json / AGENTS.md / SKILL.md versions are in sync
+        run: bash scripts/check-version-sync.sh

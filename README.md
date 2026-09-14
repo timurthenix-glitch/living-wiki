@@ -8,9 +8,12 @@
 
 - `AGENTS.md` — полный набор правил, самодостаточный файл. Это универсальный fallback: подходит для **любого** агента, который умеет читать файлы проекта (Claude Code, Cursor, Windsurf, Codex, Gemini CLI, обычный чат с доступом к файлам — что угодно).
 - `skills/living-wiki/SKILL.md` + `.claude-plugin/` — та же логика, упакованная как устанавливаемый плагин для Claude Code (см. установку ниже). Ради экономии контекста ядро правил в `SKILL.md` компактное, а детали, нужные не в каждой сессии (разовая настройка, еженедельные обзоры, приём данных со стороны, работа с несколькими агентами), вынесены в `skills/living-wiki/references/*.md` и читаются агентом только по ситуации.
-- `.cursor/rules/`, `.windsurf/rules/`, `.clinerules/`, `.qoder/rules/`, `.kiro/steering/`, `.junie/guidelines.md`, `.github/copilot-instructions.md` — короткие файлы-указатели на `AGENTS.md` в форматах, которые эти инструменты понимают из коробки.
+- `.cursor/rules/`, `.windsurf/rules/`, `.clinerules/`, `.qoder/rules/`, `.kiro/steering/`, `.junie/guidelines.md`, `.github/copilot-instructions.md` — короткие файлы-указатели на `AGENTS.md` в форматах, которые эти инструменты понимают из коробки. Все семь — копии одного `templates/rule-pointer.md`; после правки указателя запусти `scripts/sync-rule-pointers.sh`, CI (`scripts/check-rule-pointers.sh`) проверяет, что копии не разошлись.
+- `hooks/` — необязательный `SessionStart`-хук (`check-review-due.sh`): смотрит на реальные файлы в `self/Reviews/` и, если Weekly/Monthly обзор просрочен, добавляет короткое напоминание в контекст сессии. Это ускоритель поверх раздела 4.7/6.4 `AGENTS.md`, а не замена — агент обязан делать ту же проверку сам, даже если хук не сработал.
+- `examples/demo-vault/` — заполненный пример структуры (wiki/self/journal/Reviews), просто для наглядности формата; не устанавливается и не используется агентом.
+- `LICENSE` — MIT.
 
-Все файлы правил синхронизированы по смыслу и версии (`bootstrap_version`, сейчас `v0.1`, см. `CHANGELOG.md`).
+Все файлы правил синхронизированы по смыслу и версии (`bootstrap_version`, сейчас `v0.1`, см. `CHANGELOG.md`), а CI (`.github/workflows/checks.yml`) проверяет и это, и синхронность указателей при каждом push/PR.
 
 ## Установка
 

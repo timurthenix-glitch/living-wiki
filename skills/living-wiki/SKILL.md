@@ -1,6 +1,6 @@
 ---
 name: living-wiki
-description: Set up or maintain a personal, self-improving Obsidian-compatible knowledge base and self-improvement journal (plain markdown wiki/self/journal folders linked with [[wikilinks]], viewable as a graph in Obsidian). Use when the user asks to set up a personal wiki, second brain, living memory, self-improvement tracker/journal, or an Obsidian-based knowledge base for an AI agent — in this project or a new one.
+description: Set up or maintain a personal, self-improving Obsidian-compatible knowledge base and self-improvement journal (plain markdown wiki/self/journal folders linked with [[wikilinks]], viewable as a graph in Obsidian). Use when the user asks to set up a personal wiki, second brain, living memory, self-improvement tracker/journal, or an Obsidian-based knowledge base for an AI agent — in this project or a new one. Do NOT use this for generating technical/API/architecture documentation from a codebase, or a team/project wiki — this skill is only for personal knowledge and self-improvement tracking.
 ---
 
 # ЖИВАЯ ВИКИ — память и автоматизация саморазвития (skill v0.1)
