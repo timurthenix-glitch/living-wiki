@@ -15,3 +15,5 @@ jobs:
         run: bash scripts/check-rule-pointers.sh
       - name: plugin.json / AGENTS.md / SKILL.md versions are in sync
         run: bash scripts/check-version-sync.sh
+      - name: JSON manifests parse
+        run: bash scripts/check-json-valid.sh

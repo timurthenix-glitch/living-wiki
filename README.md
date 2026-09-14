@@ -1,5 +1,7 @@
 # Living Wiki — живая вики и автоматизация саморазвития
 
+> **In English:** a Claude Code plugin (also usable standalone with any file-reading agent) that sets up and maintains a personal, self-improving knowledge base and journal on plain markdown — `wiki/`, `self/`, `journal/` folders linked with Obsidian-style `[[wikilinks]]`, no database, no API keys, no embeddings. Install with `/plugin marketplace add timurthenix-glitch/living-wiki` then `/plugin install living-wiki@living-wiki` in Claude Code. The rest of this README, and the instructions the agent itself follows (`AGENTS.md`, `skills/living-wiki/SKILL.md`), are in Russian — that's the author's language and the language the resulting vault is written in. The one field that actually needs to be in English for Claude Code to match the skill correctly (`description` in `SKILL.md`'s frontmatter) already is.
+
 Персональная база знаний и дневник саморазвития, которую ведёт AI-агент: обычные markdown-файлы, связанные `[[wikilinks]]`, без базы данных, без API-ключей, без привязки к одному инструменту. Открой папку проекта как vault в Obsidian — увидишь растущий граф.
 
 Идея основана на «LLM wiki» Андрея Карпати (см. [его пост](https://x.com/karpathy)) — вместо векторной базы и embeddings агент сам ходит по markdown-файлам через `[[ссылки]]` и index-файлы, и этого достаточно, пока речь не о тысячах документов.
@@ -13,7 +15,7 @@
 - `examples/demo-vault/` — заполненный пример структуры (wiki/self/journal/Reviews), просто для наглядности формата; не устанавливается и не используется агентом.
 - `LICENSE` — MIT.
 
-Все файлы правил синхронизированы по смыслу и версии (`bootstrap_version`, сейчас `v0.1`, см. `CHANGELOG.md`), а CI (`.github/workflows/checks.yml`) проверяет и это, и синхронность указателей при каждом push/PR.
+Все файлы правил синхронизированы по смыслу и версии (`bootstrap_version`, сейчас `v0.1`, см. `CHANGELOG.md`), а CI (`.github/workflows/checks.yml`) при каждом push/PR проверяет: синхронность указателей, соотношение версий (см. «Версионирование» ниже) и что JSON-манифесты (`plugin.json`, `marketplace.json`, `hooks/hooks.json`) валидны.
 
 ## Установка
 
@@ -42,9 +44,12 @@
 
 ## Версионирование
 
-- Текущая версия бутстрапа — `v0.1` (см. `bootstrap_version` в frontmatter `AGENTS.md` и `SKILL.md`).
-- Версия проекта Claude Code-плагина в `.claude-plugin/plugin.json` следует semver (`0.1.0`) — это требование формата плагина, по сути та же `v0.1`.
-- При обновлении: см. `CHANGELOG.md`. Раздел 2.1 в `AGENTS.md`/`SKILL.md` описывает, как агент обновляет уже существующий проект до новой версии, не трогая накопленные данные пользователя (`wiki/`, `self/`, `journal/`, `log.md`).
+Два разных номера версии, специально не связанные равенством:
+
+- **`bootstrap_version`** (сейчас `v0.1`, в frontmatter `AGENTS.md` и в заголовке `SKILL.md`) — версия схемы vault и правил, которые видит уже существующий проект. Поднимается только когда реально меняется структура/поведение из разделов 2–7 `AGENTS.md`. Раздел 2.1 описывает, как агент обновляет уже существующий проект до новой версии, не трогая накопленные данные пользователя (`wiki/`, `self/`, `journal/`, `log.md`).
+- **`version` в `.claude-plugin/plugin.json`** (semver, сейчас `0.2.0`) — версия самого пакета плагина. Она обязана быть **не меньше** `bootstrap_version`, но может уйти вперёд неё — упаковочные изменения (хуки, лицензия, примеры, CI), которые не трогают схему vault, поднимают только её. Так и должно быть: Claude Code предлагает обновление только когда `plugin.json.version` меняется (см. ниже), поэтому пакет не имеет права отставать от схемы — а вот опережать её пакетными улучшениями можно сколько угодно раз между бампами схемы.
+- `scripts/check-version-sync.sh` (гоняется в CI) проверяет оба правила: `AGENTS.md`/`SKILL.md` совпадают точно, `plugin.json` — не меньше их.
+- Перед релизом полезно ещё прогнать `claude plugin validate .claude-plugin/plugin.json --strict --json` (и то же для `marketplace.json`) — это официальный валидатор схемы манифеста от Claude Code, строже, чем просто JSON-парсинг из CI.
 
 ## Обновление уже установленного плагина
 
