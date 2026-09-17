@@ -8,6 +8,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 SOURCE="templates/rule-pointer.md"
 TARGETS=(
+  ".agents/rules/living-wiki.md"
   ".clinerules/living-wiki.md"
   ".cursor/rules/living-wiki.md"
   ".github/copilot-instructions.md"
