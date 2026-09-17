@@ -3,7 +3,7 @@ name: living-wiki
 description: Set up or maintain a personal, self-improving Obsidian-compatible knowledge base and self-improvement journal (plain markdown wiki/self/journal folders linked with [[wikilinks]], viewable as a graph in Obsidian). Use when the user asks to set up a personal wiki, second brain, living memory, self-improvement tracker/journal, or an Obsidian-based knowledge base for an AI agent — in this project or a new one. Do NOT use this for generating technical/API/architecture documentation from a codebase, or a team/project wiki — this skill is only for personal knowledge and self-improvement tracking.
 ---
 
-# ЖИВАЯ ВИКИ — память и автоматизация саморазвития (skill v0.2)
+# ЖИВАЯ ВИКИ — память и автоматизация саморазвития (skill v0.2) — experimental
 
 Если в текущем проекте уже есть файл `AGENTS.md` — не перечитывай его целиком, он по сути дублирует правила ниже и существует для других агентов/инструментов в этом же проекте и на случай, если эта skill когда-нибудь окажется недоступна. Достаточно один раз за сессию свериться с его frontmatter `bootstrap_version`: совпадает с версией этой skill (см. заголовок) — ничего не делай; отличается или файла ещё нет — см. `references/setup.md`.
 

@@ -1,6 +1,6 @@
 {
   "name": "living-wiki",
-  "displayName": "Living Wiki",
+  "displayName": "Living Wiki (v0.2, experimental)",
   "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only, без API-ключей и баз данных)",
   "version": "0.3.0",
   "author": {

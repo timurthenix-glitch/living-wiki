@@ -8,8 +8,8 @@
   "plugins": [
     {
       "name": "living-wiki",
-      "displayName": "Living Wiki",
-      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.2: 2-3 связи на странице, проактивная декомпозиция, нативные Color Groups.",
+      "displayName": "Living Wiki (v0.2, experimental)",
+      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.2 (experimental): 2-3 связи на странице, проактивная декомпозиция, нативные Color Groups. Если нужна проверенная схема — living-wiki-legacy-v0.1.",
       "source": "."
     },
     {
