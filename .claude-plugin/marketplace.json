@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "living-wiki-experimental",
-  "description": "Живая вики (experimental v0.2 — плотные связи между страницами, без «сирот»): Obsidian-совместимая база знаний и контур саморазвития на markdown",
+  "name": "living-wiki",
+  "description": "Живая вики: Obsidian-совместимая база знаний и контур саморазвития на markdown",
   "owner": {
     "name": "timurthenix-glitch"
   },
@@ -9,8 +9,18 @@
     {
       "name": "living-wiki",
       "displayName": "Living Wiki",
-      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only)",
+      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.2: 2-3 связи на странице, проактивная декомпозиция, нативные Color Groups.",
       "source": "."
+    },
+    {
+      "name": "living-wiki-legacy-v0.1",
+      "displayName": "Living Wiki (legacy, schema v0.1)",
+      "description": "Та же вики на более старой схеме v0.1 (минимум 1 связь на странице, без проактивной декомпозиции на смысловые блоки) — для тех, кто уже настроил проект под v0.1 и пока не хочет переходить на v0.2. Зафиксировано на теге living-wiki--v0.2.0 (последний релиз пакета ещё со схемой bootstrap v0.1).",
+      "source": {
+        "source": "github",
+        "repo": "timurthenix-glitch/living-wiki",
+        "ref": "living-wiki--v0.2.0"
+      }
     }
   ]
 }
