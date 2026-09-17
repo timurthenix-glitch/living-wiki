@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "living-wiki",
-  "description": "Живая вики: Obsidian-совместимая база знаний и контур саморазвития на markdown",
+  "name": "living-wiki-experimental",
+  "description": "Живая вики (experimental v0.2 — плотные связи между страницами, без «сирот»): Obsidian-совместимая база знаний и контур саморазвития на markdown",
   "owner": {
     "name": "timurthenix-glitch"
   },
