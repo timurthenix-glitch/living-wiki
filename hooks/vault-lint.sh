@@ -74,6 +74,28 @@ while IFS= read -r file; do
     [[ -z "$tgt" ]] && continue
 
     resolved=""
+    # Check if target is a media/attachment file (e.g. .png, .jpg, .jpeg, .gif, .webp, .svg, .bmp, .avif)
+    if [[ "$tgt" =~ \.(png|jpe?g|gif|webp|svg|bmp|avif)$ ]]; then
+      cand=$(realpath_m "$fdir/$tgt")
+      if [[ -n "$cand" && -f "$cand" ]]; then
+        resolved="$cand"
+      else
+        cand_att=$(realpath_m "$PROJECT_DIR/attachments/$(basename "$tgt")")
+        if [[ -n "$cand_att" && -f "$cand_att" ]]; then
+          resolved="$cand_att"
+        else
+          cand_root=$(realpath_m "$PROJECT_DIR/$tgt")
+          if [[ -n "$cand_root" && -f "$cand_root" ]]; then
+            resolved="$cand_root"
+          fi
+        fi
+      fi
+      if [[ -z "$resolved" ]]; then
+        printf '%s -> %s\n' "$file" "$raw" >> "$TMP/broken.txt"
+      fi
+      continue
+    fi
+
     cand=$(realpath_m "$fdir/$tgt.md")
     if [[ -n "$cand" && -f "$cand" ]]; then
       resolved="$cand"

@@ -1,0 +1,20 @@
+# Personal attachments & screenshots (do not commit user images to repo)
+attachments/*
+!attachments/.gitkeep
+examples/demo-vault/attachments/*
+!examples/demo-vault/attachments/.gitkeep
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.bmp
+*.avif
+
+# OS & editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
