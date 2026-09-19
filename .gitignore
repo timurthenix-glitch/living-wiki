@@ -18,3 +18,13 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Local memory cache & databases
+.cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python bytecode
+__pycache__/
+*.py[cod]
