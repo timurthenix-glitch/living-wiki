@@ -242,7 +242,14 @@ class EvidenceReducer:
                 verified_evidence.append(f"{line_no:5d} | {content_str}")
 
         reduced_evidence_str = "\n".join(verified_evidence)
-        status = "FAILED" if any(cls.ERROR_PATTERNS[0].search(log_text) or "FAIL" in log_text.upper() or "ERROR" in log_text.upper() for _ in [1]) else "COMPLETED"
+
+        # Определение статуса с фильтрацией ложных срабатываний (напр. '0 failed', 'failures=0', 'no errors')
+        has_real_errors = any(pat.search(log_text) for pat in cls.ERROR_PATTERNS)
+        if not has_real_errors:
+            clean_text = re.sub(r"\b(0\s+fail\w*|failures\s*=\s*0|no\s+errors?)\b", "", log_text, flags=re.IGNORECASE)
+            if re.search(r"\b(FAILED|FAILURES|ERRORS?|CRITICAL)\b", clean_text):
+                has_real_errors = True
+        status = "FAILED" if has_real_errors else "COMPLETED"
 
         receipt = f"""[EVIDENCE RECEIPT] Log ID: log_{short_hash}
 Статус: {status}
@@ -276,7 +283,13 @@ class ActionFusion:
         print(f"[FUSE] Запуск: {command}")
         start_time = time.time()
 
-        proc = subprocess.run(command, shell=True, capture_output=True, text=True, errors="replace")
+        executable = None
+        if sys.platform == "win32":
+            git_bash = Path("C:/Program Files/Git/bin/bash.exe")
+            if git_bash.exists() and any(op in command for op in ["&&", "||", ";", "export "]):
+                executable = str(git_bash)
+
+        proc = subprocess.run(command, shell=True, executable=executable, capture_output=True, text=True, errors="replace")
         duration = time.time() - start_time
 
         combined_output = (proc.stdout + "\n" + proc.stderr).strip()
@@ -373,7 +386,8 @@ class VaultAtlas:
         journal_dir = vault_root / "journal"
         latest_journal = "нет записей"
         if journal_dir.is_dir():
-            journals = sorted([f.name for f in journal_dir.glob("????-??-??.md")])
+            date_re = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
+            journals = sorted([f.name for f in journal_dir.glob("*.md") if date_re.match(f.name)])
             if journals:
                 latest_journal = journals[-1]
 
@@ -478,11 +492,15 @@ def main():
 
     # --- pack ---
     if args.command == "pack":
-        if args.file and os.path.exists(args.file):
+        if args.file:
+            if not os.path.exists(args.file):
+                parser.error(f"Файл не найден: {args.file}")
             with open(args.file, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
             source = Path(args.file).name
         else:
+            if sys.stdin.isatty():
+                parser.error("Не указан файл и отсутствует входной поток stdin.")
             content = sys.stdin.read()
             source = args.source
 
@@ -513,10 +531,14 @@ def main():
 
     # --- reduce ---
     elif args.command == "reduce":
-        if args.file and os.path.exists(args.file):
+        if args.file:
+            if not os.path.exists(args.file):
+                parser.error(f"Файл не найден: {args.file}")
             with open(args.file, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
         else:
+            if sys.stdin.isatty():
+                parser.error("Не указан файл лога и отсутствует входной поток stdin.")
             content = sys.stdin.read()
 
         if not content.strip():

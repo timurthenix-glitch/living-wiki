@@ -117,6 +117,12 @@ class TestEvidenceReducer(unittest.TestCase):
         res = EvidenceReducer.reduce(original_text)
         self.assertTrue(res["verified"])
 
+    def test_reduce_status_with_zero_failures_is_completed(self):
+        # Лог с успешным результатом, где слово fail встречается только как 0 failed
+        successful_log = "Running tests...\nResults: 15 passed, 0 failed, 0 errors in 1.2s\nDone."
+        res = EvidenceReducer.reduce(successful_log)
+        self.assertEqual(res["status"], "COMPLETED")
+
 
 class TestActionFusion(unittest.TestCase):
     def test_run_command_short_output(self):
@@ -131,7 +137,12 @@ class TestActionFusion(unittest.TestCase):
 
 class TestEngineMemoryIntegration(unittest.TestCase):
     def setUp(self):
-        self.storage = MemoryStorage()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "test_memory.db"
+        self.storage = MemoryStorage(db_path=self.db_path)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_store_and_match(self):
         q = "Как запустить docker контейнер в фоновом режиме?"
