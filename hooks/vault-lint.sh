@@ -126,6 +126,8 @@ while IFS= read -r file; do
   printf '%s\n' "$s_content" | grep -oE '!\[[^]]*\]\([^)]+\)' | while IFS= read -r md_img; do
     tgt=$(printf '%s' "$md_img" | sed -E 's/^!\[[^]]*\]\(([^)]+)\)$/\1/')
     tgt="$(printf '%s' "$tgt" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    # Strip optional title or angle brackets: ![alt](<path> "title") or ![alt](path "title")
+    tgt=$(printf '%s' "$tgt" | sed -E 's/^<([^>]+)>.*/\1/; s/^([^[:space:]]+).*/\1/')
     [[ -z "$tgt" ]] && continue
     [[ "$tgt" =~ ^https?:// ]] && continue
 
@@ -185,8 +187,10 @@ while IFS= read -r file; do
       infm { next }
       /^#/ { next }
       /^!/ { next }
-      /\[\[.*\]\]/ { next }
-      { print }
+      {
+        gsub(/\[\[[^]]*\]\]/, "")
+        print
+      }
     ' "$file" | wc -w | tr -d '[:space:]')
     prose_words=${prose_words:-0}
     if (( prose_words < 10 )); then

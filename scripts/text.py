@@ -70,8 +70,9 @@ RU_ENDINGS_REGEX = re.compile(
 
 
 def normalize_string(text: str) -> str:
-    """Приводит строку к нижнему регистру и нормализует пробелы."""
+    """Приводит строку к нижнему регистру, убирает апострофы и нормализует пробелы."""
     text = text.lower()
+    text = re.sub(r"['’`]", "", text)
     text = re.sub(r"[^\w\s-]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -87,8 +88,10 @@ def stem_word(w: str) -> str:
     w = w.lower()
     if len(w) <= 3:
         return w
-    # Английские окончания
-    w = re.sub(r"(?:ing|ed|es|s)$", "", w)
+    # Английские окончания (не отсекаем s после s: pass, class; сохраняем основу >= 3 символов)
+    w_en = re.sub(r"(?:ing|ed|es|(?<!s)s)$", "", w)
+    if len(w_en) >= 3:
+        w = w_en
     # Русские окончания (в 2 прохода для составных суффиксов)
     for _ in range(2):
         w_sub = RU_ENDINGS_REGEX.sub("", w)
@@ -103,7 +106,10 @@ def get_negations(words: List[str]) -> Set[str]:
 
 
 def check_antonym_conflict(words1: List[str], words2: List[str]) -> bool:
-    """Возвращает True, если в текстах используются противоположные полярные команды."""
+    """
+    Возвращает True, если в одном тексте используется полярная команда,
+    а в другом — противоположная (при условии, что ни один текст не сравнивает обе).
+    """
     set1, set2 = set(words1), set(words2)
     for group_a, group_b in ANTONYM_PAIRS:
         has_a1 = bool(set1 & group_a)
@@ -111,7 +117,11 @@ def check_antonym_conflict(words1: List[str], words2: List[str]) -> bool:
         has_a2 = bool(set2 & group_a)
         has_b2 = bool(set2 & group_b)
         
-        # Если в первом тексте команда из group_a, а во втором — из group_b (или наоборот)
+        # Если в каком-либо из текстов присутствуют оба термина (сравнение) — конфликта нет
+        if (has_a1 and has_b1) or (has_a2 and has_b2):
+            continue
+        
+        # Конфликт только когда текст 1 строго про group_a, а текст 2 строго про group_b (или наоборот)
         if (has_a1 and has_b2) or (has_b1 and has_a2):
             return True
     return False

@@ -58,6 +58,28 @@ class TestTextSimilarity(unittest.TestCase):
         self.assertGreaterEqual(score, 0.88)
 
 
+    def test_english_negation_contractions(self):
+        q1 = "How to run docker?"
+        q2 = "Why don't run docker?"
+        score, det = calculate_similarity(q1, q2)
+        self.assertEqual(score, 0.0)
+        self.assertEqual(det.get("conflict"), "negation_mismatch")
+
+    def test_antonym_both_terms_no_false_conflict(self):
+        q1 = "В чем разница между включить и выключить кэш?"
+        q2 = "Какая разница между включить и выключить кэш?"
+        score, det = calculate_similarity(q1, q2)
+        self.assertGreaterEqual(score, 0.80)
+        self.assertNotIn("conflict", det)
+
+    def test_english_stemming_short_words(self):
+        self.assertEqual(stem_word("king"), "king")
+        self.assertEqual(stem_word("ring"), "ring")
+        self.assertEqual(stem_word("pass"), "pass")
+        self.assertEqual(stem_word("passes"), "pass")
+        self.assertEqual(stem_word("classes"), "class")
+
+
 class TestMemoryStorage(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -100,6 +122,7 @@ class TestMemoryStorage(unittest.TestCase):
     def test_update_on_duplicate(self):
         res1 = self.storage.store("Что такое DNS?", "Система доменных имен")
         self.assertEqual(res1["action"], "inserted")
+        self.assertEqual(self.storage.list_entries()[0]["hit_count"], 0)
         
         res2 = self.storage.store("Что такое DNS?", "Domain Name System — система доменных имен")
         self.assertEqual(res2["action"], "updated")
@@ -107,6 +130,37 @@ class TestMemoryStorage(unittest.TestCase):
         entries = self.storage.list_entries()
         self.assertEqual(len(entries), 1)
         self.assertIn("Domain Name System", entries[0]["answer"])
+        # Проверяем, что обновление не накрутило hit_count
+        self.assertEqual(entries[0]["hit_count"], 0)
+
+    def test_sync_from_markdown_preserves_subsections(self):
+        vault_dir = Path(self.temp_dir.name) / "vault"
+        self_dir = vault_dir / "self"
+        self_dir.mkdir(parents=True, exist_ok=True)
+        lessons_file = self_dir / "Lessons-Learned.md"
+        lessons_file.write_text("""---
+title: Уроки
+tags: [урок]
+---
+
+## Ошибка синхронизации хранилища
+Основное описание ошибки.
+### Контекст проблемы
+Случилась перегрузка очередей.
+### Решение
+Добавить экспоненциальный бэкофф.
+
+## Связано
+- [[index]]
+""", encoding="utf-8")
+
+        count = self.storage.sync_from_markdown(vault_dir)
+        self.assertEqual(count, 1)
+        entries = self.storage.list_entries()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["question"], "Ошибка синхронизации хранилища")
+        self.assertIn("### Контекст проблемы", entries[0]["answer"])
+        self.assertIn("### Решение", entries[0]["answer"])
 
 
 if __name__ == "__main__":

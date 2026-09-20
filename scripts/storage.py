@@ -60,9 +60,11 @@ class MemoryStorage:
 
     @contextmanager
     def _get_connection(self):
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         conn.row_factory = sqlite3.Row
         try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA busy_timeout=10000;")
             yield conn
         finally:
             conn.close()
@@ -90,16 +92,18 @@ class MemoryStorage:
     def store(self, question: str, answer: str, tags: str = "", agent: str = "") -> Dict[str, Any]:
         """
         Сохраняет пару «вопрос → ответ».
-        Если уже есть запись с очень высокой схожестью (>= 0.95), обновляет её ответ.
+        Если уже есть запись с очень высокой схожестью (>= 0.95), обновляет её ответ без накрутки hit_count.
         """
         now = datetime.now(timezone.utc).isoformat()
         q_clean = normalize_string(question)
         
-        # Проверяем, нет ли уже дубликата с высокой степенью совпадения
-        existing = self.find_match(question, threshold=0.95)
+        # Проверяем, нет ли уже дубликата (используем search, чтобы не накручивать счетчик попаданий)
+        best_rec, best_score, _ = self.search(question)
+        existing = (best_rec, best_score) if (best_rec and best_score >= 0.95) else None
+
         with self._get_connection() as conn:
             if existing:
-                rec, score, _ = existing
+                rec, score = existing
                 conn.execute("""
                     UPDATE memory_cache
                     SET answer = ?, tags = ?, agent = ?, updated_at = ?
@@ -128,9 +132,19 @@ class MemoryStorage:
     def search(self, query: str) -> Tuple[Optional[Dict[str, Any]], float, Dict[str, Any]]:
         """
         Ищет наиболее похожий вопрос в базе среди всех записей.
+        Сначала проверяет индекс точного совпадения, затем выполняет перебор.
         Возвращает (best_row_dict, best_score, best_details).
         """
+        q_clean = normalize_string(query)
         with self._get_connection() as conn:
+            if q_clean:
+                exact_row = conn.execute(
+                    "SELECT * FROM memory_cache WHERE question_clean = ? LIMIT 1",
+                    (q_clean,)
+                ).fetchone()
+                if exact_row:
+                    return dict(exact_row), 1.0, {"exact": True, "cosine_3gram": 1.0, "jaccard_words": 1.0, "combined": 1.0}
+
             rows = conn.execute("SELECT * FROM memory_cache").fetchall()
             
         if not rows:
@@ -207,26 +221,31 @@ class MemoryStorage:
     def sync_from_markdown(self, vault_path: Path) -> int:
         """
         Импортирует проверенные уроки из self/Lessons-Learned.md в кэш SQLite.
-        Ищет разделы уроков и сохраняет заголовок как вопрос/ситуацию, а тело как решение.
+        Ищет разделы уроков (только заголовки ##) и сохраняет заголовок как вопрос/ситуацию,
+        а тело (включая подразделы ###) как решение.
         """
         lessons_file = vault_path / "self" / "Lessons-Learned.md"
         if not lessons_file.exists():
             return 0
 
         content = lessons_file.read_text(encoding="utf-8")
+        # Снимаем YAML frontmatter, если есть
+        clean_content = re.sub(r"^---\n.*?\n---\n?", "", content, flags=re.DOTALL)
         imported = 0
-        # Разделяем по заголовкам ## или ###
-        blocks = re.split(r"\n(?=#{2,4}\s+)", content)
+        # Разделяем строго по заголовкам второго уровня (## ), не дробя подразделы ### и ####
+        blocks = re.split(r"(?:\n|^)(?=##\s+)", clean_content)
         for block in blocks:
             lines = [l.strip() for l in block.strip().split("\n") if l.strip()]
             if not lines:
                 continue
-            title = lines[0].lstrip("#- ").strip()
+            if not lines[0].startswith("## "):
+                continue
+            title = lines[0][3:].strip()
             # Пропускаем служебные заголовки вроде "Связано"
             if title.lower() in {"связано", "уроки", "lessons learned", "related"}:
                 continue
             body = "\n".join(lines[1:])
-            if body and len(title) > 5:
+            if body and len(title) > 3:
                 self.store(question=title, answer=body, tags="lesson,markdown_sync", agent="sync")
                 imported += 1
 
@@ -275,11 +294,9 @@ def main():
     storage = MemoryStorage()
 
     if args.command == "match":
-        best_rec, best_score, best_details = storage.search(args.query)
-        if best_rec and best_score >= args.threshold:
-            # Инкрементируем счетчик попаданий
-            matched_res = storage.find_match(args.query, threshold=args.threshold)
-            rec, score, details = matched_res if matched_res else (best_rec, best_score, best_details)
+        matched_res = storage.find_match(args.query, threshold=args.threshold)
+        if matched_res:
+            rec, score, details = matched_res
             if args.json:
                 print(json.dumps({
                     "matched": True,
@@ -301,6 +318,7 @@ def main():
                 print(rec["answer"])
             sys.exit(0)
         else:
+            best_rec, best_score, best_details = storage.search(args.query)
             if args.json:
                 print(json.dumps({
                     "matched": False,
@@ -312,7 +330,7 @@ def main():
                 }, ensure_ascii=False, indent=2))
             elif args.verbose:
                 print(f"[MISS] Нет совпадений с порогом >= {args.threshold}")
-                if best_rec:
+                if best_rec and best_score > 0.0:
                     print(f"Ближайший кандидат (скор {best_score:.4f}): '{best_rec['question']}'")
                     print(f"Детали: {best_details}")
             sys.exit(1)
