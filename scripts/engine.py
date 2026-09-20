@@ -283,13 +283,7 @@ class ActionFusion:
         print(f"[FUSE] Запуск: {command}")
         start_time = time.time()
 
-        executable = None
-        if sys.platform == "win32":
-            git_bash = Path("C:/Program Files/Git/bin/bash.exe")
-            if git_bash.exists() and any(op in command for op in ["&&", "||", ";", "export "]):
-                executable = str(git_bash)
-
-        proc = subprocess.run(command, shell=True, executable=executable, capture_output=True, text=True, errors="replace")
+        proc = subprocess.run(command, shell=True, capture_output=True, text=True, errors="replace")
         duration = time.time() - start_time
 
         combined_output = (proc.stdout + "\n" + proc.stderr).strip()
