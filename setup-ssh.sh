@@ -34,4 +34,14 @@ if [ -d "/opt/jarvis/web" ]; then
     docker compose restart web || true
 fi
 
+echo "=== Cleaning Docker Disk Space ==="
+docker system prune -af 2>/dev/null || true
+docker builder prune -af 2>/dev/null || true
+journalctl --vacuum-size=100M 2>/dev/null || true
+apt clean 2>/dev/null || true
+
+echo "=== DISK USAGE ==="
+df -h /
+
 echo "=== READY: Antigravity SSH is now ACTIVE! ==="
+
