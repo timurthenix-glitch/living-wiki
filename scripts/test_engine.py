@@ -3,6 +3,7 @@
 test_engine.py — Модульные тесты для единого контура эффективности (engine.py).
 """
 
+import re
 import sys
 import tempfile
 import unittest
@@ -65,8 +66,15 @@ class TestObservationPack(unittest.TestCase):
         self.assertFalse(p_out["has_more"])
 
     def test_recall_missing_handle_raises(self):
+        # несуществующий, но валидный по форме хэндл (12 hex)
         with self.assertRaises(FileNotFoundError):
-            ObservationPack.recall("obs_nonexistent123")
+            ObservationPack.recall("obs_abcdef123456")
+
+    def test_recall_rejects_path_traversal(self):
+        # Хэндл подставляется в путь — всё, что не 12 hex, должно отбиваться до обращения к ФС
+        for bad in ("obs_../../../../etc/passwd", "../secrets", "obs_ZZZZ", "obs_abc"):
+            with self.assertRaises(ValueError):
+                ObservationPack.recall(bad)
 
 
 class TestEvidenceReducer(unittest.TestCase):
@@ -110,18 +118,55 @@ class TestEvidenceReducer(unittest.TestCase):
         self.assertIn("Traceback (most recent call last):", receipt)
         self.assertIn("FAILED (failures=1, errors=0)", receipt)
 
-    def test_guardrail_detects_corrupted_citation(self):
-        # Проверяем, что внутренняя валидация не пропустит строку, которой нет в источнике
-        original_text = "Строка 1\nСтрока 2\nError: что-то сломалось"
-        # Вызов reduce на валидном логе
-        res = EvidenceReducer.reduce(original_text)
+    def test_verify_citation_rejects_shifted_line_number(self):
+        # Инвариант обязан падать на сбитой нумерации — это единственный реальный
+        # класс ошибок редуктора (прежняя проверка «строка есть в тексте» была тавтологией).
+        lines = ["первая", "вторая", "третья"]
+        EvidenceReducer.verify_citation(lines, 2, "вторая")  # корректная цитата — молча
+        with self.assertRaises(ValueError):
+            EvidenceReducer.verify_citation(lines, 3, "вторая")  # off-by-one
+        with self.assertRaises(ValueError):
+            EvidenceReducer.verify_citation(lines, 0, "первая")  # выход за границы
+        with self.assertRaises(ValueError):
+            EvidenceReducer.verify_citation(lines, 99, "третья")
+
+    def test_receipt_line_numbers_match_source(self):
+        # Сквозная проверка: каждая пронумерованная цитата в квитанции соответствует источнику
+        res = EvidenceReducer.reduce(self.simulated_log)
         self.assertTrue(res["verified"])
+        src = self.simulated_log.splitlines()
+        quoted = 0
+        for row in res["receipt"].splitlines():
+            m = re.match(r"^\s*(\d+) \| (.*)$", row)
+            if m:
+                quoted += 1
+                self.assertEqual(src[int(m.group(1)) - 1], m.group(2))
+        self.assertGreater(quoted, 0)
 
     def test_reduce_status_with_zero_failures_is_completed(self):
         # Лог с успешным результатом, где слово fail встречается только как 0 failed
         successful_log = "Running tests...\nResults: 15 passed, 0 failed, 0 errors in 1.2s\nDone."
         res = EvidenceReducer.reduce(successful_log)
         self.assertEqual(res["status"], "COMPLETED")
+
+    def test_reduce_status_with_zero_errors_colon_is_completed(self):
+        # Регрессия: 'ERRORS: 0' раньше давало ложный FAILED на зелёной сборке
+        successful_log = "build ok\nNo issues. ERRORS: 0\nDone."
+        res = EvidenceReducer.reduce(successful_log)
+        self.assertEqual(res["status"], "COMPLETED")
+        self.assertEqual(res["status_source"], "heuristic")
+
+    def test_exit_code_overrides_heuristic(self):
+        # Код возврата — факт: лог со словом Error, но exit_code=0 → COMPLETED
+        noisy_ok = "Инициализация...\nError: (это часть имени теста)\nвсё прошло"
+        res = EvidenceReducer.reduce(noisy_ok, exit_code=0)
+        self.assertEqual(res["status"], "COMPLETED")
+        self.assertEqual(res["status_source"], "exit_code")
+
+        # И наоборот: чистый лог, но ненулевой код → FAILED
+        res2 = EvidenceReducer.reduce("всё тихо\nготово", exit_code=2)
+        self.assertEqual(res2["status"], "FAILED")
+        self.assertEqual(res2["status_source"], "exit_code")
 
 
 class TestActionFusion(unittest.TestCase):
@@ -157,7 +202,40 @@ class TestEngineMemoryIntegration(unittest.TestCase):
         self.assertEqual(rec["answer"], a)
 
 
+class TestStoreDedup(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.storage = MemoryStorage(db_path=Path(self.tmp.name) / "dedup.db")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_near_duplicate_titles_stay_separate(self):
+        # Регрессия: порог 0.95 по нечёткой метрике схлопывал разные уроки в один
+        a = self.storage.store("Docker compose не поднимает порт", "Решение А")
+        b = self.storage.store("Docker compose не поднимает порты", "Решение Б")
+        self.assertEqual(a["action"], "inserted")
+        self.assertEqual(b["action"], "inserted")
+        self.assertNotEqual(a["id"], b["id"])
+        self.assertEqual(len(self.storage.list_entries()), 2)
+
+    def test_exact_question_updates_in_place(self):
+        a = self.storage.store("Как собрать клиент", "Старый ответ")
+        b = self.storage.store("как  собрать   клиент", "Новый ответ")  # та же нормализация
+        self.assertEqual(b["action"], "updated")
+        self.assertEqual(a["id"], b["id"])
+        self.assertEqual(len(self.storage.list_entries()), 1)
+
+
 class TestVaultAtlas(unittest.TestCase):
+    def test_get_status_on_empty_dir(self):
+        from engine import VaultAtlas
+        # Пустой каталог без wiki/ и self/ не должен ронять атлас
+        with tempfile.TemporaryDirectory() as d:
+            status_data = VaultAtlas.get_status(start_dir=Path(d))
+            self.assertIn("[VAULT ATLAS]", status_data["report"])
+            self.assertEqual(status_data["topics"], [])
+
     def test_get_status_returns_report(self):
         from engine import VaultAtlas
         status_data = VaultAtlas.get_status()

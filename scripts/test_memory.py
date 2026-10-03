@@ -14,7 +14,8 @@ from text import (
     normalize_string,
     stem_word,
     check_antonym_conflict,
-    get_negations
+    get_negations,
+    extract_words
 )
 from storage import MemoryStorage
 
@@ -161,6 +162,60 @@ tags: [урок]
         self.assertEqual(entries[0]["question"], "Ошибка синхронизации хранилища")
         self.assertIn("### Контекст проблемы", entries[0]["answer"])
         self.assertIn("### Решение", entries[0]["answer"])
+
+    def test_hyphen_word_extraction(self):
+        words = extract_words("Настройка нейро-tts и update.bat скрипта")
+        self.assertIn("нейро-tts", words)
+        self.assertIn("нейро", words)
+        self.assertIn("tts", words)
+
+    def test_date_stripping_exact_match(self):
+        self.storage.store("2026-10-04: Сборка упала из-за порта", "Смени порт в конфиге")
+        matched = self.storage.find_match("Сборка упала из-за порта")
+        self.assertIsNotNone(matched)
+        rec, score, _ = matched
+        self.assertEqual(score, 1.0)
+        self.assertEqual(rec["answer"], "Смени порт в конфиге")
+
+    def test_search_top_with_answer_bonus(self):
+        self.storage.store(
+            "Настройка сетевого шлюза",
+            "Для маршрутизации используется nginx reverse proxy на порту 8080",
+            tags="network,proxy"
+        )
+        results = self.storage.search_top("nginx proxy", top_k=3, min_score=0.35)
+        self.assertGreater(len(results), 0)
+        best_rec, best_score, details = results[0]
+        self.assertIn("nginx", best_rec["answer"])
+        self.assertIn("answer_keyword_bonus", details)
+
+    def test_sync_includes_lessons_archive_and_wiki(self):
+        vault_dir = Path(self.temp_dir.name) / "full_vault"
+        (vault_dir / "self" / "Lessons").mkdir(parents=True, exist_ok=True)
+        (vault_dir / "wiki" / "architecture").mkdir(parents=True, exist_ok=True)
+
+        # 1. Lessons-Learned.md
+        (vault_dir / "self" / "Lessons-Learned.md").write_text("""## Активный урок
+Решение активного урока.
+""", encoding="utf-8")
+
+        # 2. self/Lessons/Lessons-Archive.md
+        (vault_dir / "self" / "Lessons" / "Lessons-Archive.md").write_text("""## Архивный урок
+Решение архивного урока.
+""", encoding="utf-8")
+
+        # 3. wiki/architecture/system.md
+        (vault_dir / "wiki" / "architecture" / "system.md").write_text("""# Системная архитектура
+## Шлюз API
+Схема работы шлюза API.
+""", encoding="utf-8")
+
+        count = self.storage.sync_from_markdown(vault_dir)
+        self.assertEqual(count, 3)
+        entries = {e["question"]: e["answer"] for e in self.storage.list_entries(limit=10)}
+        self.assertIn("Активный урок", entries)
+        self.assertIn("Архивный урок", entries)
+        self.assertIn("Системная архитектура: Шлюз API", entries)
 
 
 if __name__ == "__main__":

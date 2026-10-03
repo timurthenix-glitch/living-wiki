@@ -32,12 +32,12 @@ trap 'rm -rf "$TMP"' EXIT
 } | sort -u > "$TMP/all_files.txt"
 
 # Files actually graded against the "2-3 links" / size / topic-index rules:
-# only pages inside wiki/ and self/ (AGENTS.md sec. 1) — self/Reviews/ is a
-# dated log like journal/, not a graph node, and root-level files (index.md,
-# log.md, AGENTS.md) aren't wiki pages either.
+# only pages inside wiki/ and self/ (AGENTS.md sec. 1) — self/Reviews/ and
+# self/Lessons/ are dated logs like journal/, not active graph nodes, and root-level files
+# (index.md, log.md, AGENTS.md) aren't wiki pages either.
 {
   find "$WIKI_DIR" -type f -name '*.md' 2>/dev/null
-  find "$SELF_DIR" -type f -name '*.md' 2>/dev/null | grep -v "^${SELF_DIR}/Reviews/"
+  find "$SELF_DIR" -type f -name '*.md' 2>/dev/null | grep -v -E "^${SELF_DIR}/(Reviews|Lessons)/"
 } | sort -u > "$TMP/graded_files.txt"
 
 : > "$TMP/broken.txt"

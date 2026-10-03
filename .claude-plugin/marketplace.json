@@ -8,8 +8,8 @@
   "plugins": [
     {
       "name": "living-wiki",
-      "displayName": "Living Wiki (v0.4.1, experimental — last build 2026-09-20)",
-      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.4 (experimental): поддержка attachments/ и скриншотов ошибок к урокам с текстовой дистилляцией, защита приватности вложений в git, детектор vault-lint.sh. Если нужна проверенная схема — living-wiki-legacy-v0.1.",
+      "displayName": "Living Wiki (v0.5.0, experimental — last build 2026-10-04)",
+      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.5 (experimental): 3-уровневая модель памяти LOD (status/active/archive), архивация self/Lessons/, защита от раздувания контекста, гибридный семантический поиск SQLite (Query Coverage, fallback >= 0.35, сквозная индексация уроков и wiki), чистота корня и запрет вторых хранилищ.",
       "source": "."
     },
     {

@@ -6,7 +6,8 @@ engine.py — Единый контур эффективности Живой В
   1. Action Fusion (fuse): слияние выполнения команд, авто-фильтрации логов и синхронизации памяти.
   2. ObservationPack (pack / recall): упаковка больших наблюдений в легковесные хэндлы с постраничным чтением.
   3. Evidence-Preserving Reducer (reduce): сжатие диагностических логов с гарантией точных цитат (zero-hallucination).
-  4. Semantic Memory (match / store / sync): быстрый поиск решений (>=0.88) и уроков в SQLite.
+  4. Semantic Memory (match / store / sync): быстрый поиск решений (>=0.88), гибридный fallback (>=0.35) и уроков в SQLite.
+  5. VaultAtlas (status): сверхбыстрый LOD 0 дашборд (~150 токенов) для защиты контекста агента.
 """
 
 import os
@@ -50,6 +51,58 @@ def get_logs_dir() -> Path:
     d = get_cache_root() / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _sync_state_file() -> Path:
+    return get_cache_root() / "sync_state.json"
+
+
+def _lessons_path() -> Path:
+    return get_cache_root().parent / "self" / "Lessons-Learned.md"
+
+
+def lessons_changed() -> bool:
+    """True, если self/Lessons-Learned.md менялся с момента последнего синка."""
+    lessons = _lessons_path()
+    if not lessons.exists():
+        return False
+    try:
+        state = json.loads(_sync_state_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    return state.get("lessons_mtime") != lessons.stat().st_mtime
+
+
+def mark_lessons_synced() -> None:
+    """Запоминает mtime уроков после успешной синхронизации."""
+    lessons = _lessons_path()
+    if not lessons.exists():
+        return
+    try:
+        _sync_state_file().write_text(
+            json.dumps({"lessons_mtime": lessons.stat().st_mtime}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass  # кэш-подсказка, не критично для работы
+
+
+def cleanup_cache(max_age_days: int = 14) -> int:
+    """
+    Удаляет архивы логов и упакованные наблюдения старше max_age_days.
+    Кэш иначе растёт бесконечно: reduce/pack пишут файл на каждый вызов.
+    """
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for d in (get_logs_dir(), get_obs_dir()):
+        for f in d.iterdir():
+            try:
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except OSError:
+                continue
+    return removed
 
 
 # =====================================================================
@@ -123,6 +176,10 @@ class ObservationPack:
         Возвращает срез строк из упакованного наблюдения по 1-индексированному смещению.
         """
         clean_hash = handle_or_hash.replace("obs_", "").strip()
+        # Хэндл подставляется в путь, поэтому принимаем только то, что выдаёт pack():
+        # 12 hex-символов. Иначе 'obs_../../..' уводит чтение за пределы .cache/obs.
+        if not re.fullmatch(r"[0-9a-f]{12}", clean_hash):
+            raise ValueError(f"Некорректный хэндл наблюдения: {handle_or_hash!r}")
         obs_dir = get_obs_dir()
         raw_file = obs_dir / f"{clean_hash}.raw"
 
@@ -165,17 +222,46 @@ class EvidenceReducer:
     """
     ERROR_PATTERNS = [
         re.compile(r"Traceback \(most recent call last\):", re.IGNORECASE),
-        re.compile(r"^\s*File \".+\", line \d+", re.IGNORECASE),
+        re.compile(r"^\s*File \".+\", line \d+", re.IGNORECASE | re.MULTILINE),
         re.compile(r"\b(Error|Exception|AssertionError|TypeError|ValueError|SyntaxError|Fatal|Panic):", re.IGNORECASE),
-        re.compile(r"^\s*(FAILED|ERROR)\b", re.IGNORECASE),
+        re.compile(r"^\s*(FAILED|ERROR)\b", re.IGNORECASE | re.MULTILINE),
         re.compile(r"={3,}\s*(FAILURES|ERRORS)\s*={3,}", re.IGNORECASE),
         re.compile(r"FAILED \(.*failures=\d+.*\)", re.IGNORECASE),
         re.compile(r"npm ERR!", re.IGNORECASE),
         re.compile(r"exit status \d+", re.IGNORECASE),
     ]
 
+    # Нулевые счётчики в сводках («0 failed», «ERRORS: 0», «no errors») — не признак ошибки.
+    # Вырезаются перед вторичной эвристикой, иначе зелёная сборка получает статус FAILED.
+    ZERO_COUNT_RE = re.compile(
+        r"\b(?:"
+        r"0\s+(?:fail\w*|errors?|warnings?)"
+        r"|(?:fail\w*|errors?|warnings?)\s*[:=]\s*0"
+        r"|no\s+(?:errors?|failures?|warnings?)"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def verify_citation(lines: List[str], line_no: int, content_str: str) -> None:
+        """
+        Инвариант выжимки: номер строки обязан указывать РОВНО на эту строку источника.
+        """
+        if not (1 <= line_no <= len(lines)) or lines[line_no - 1] != content_str:
+            raise ValueError(
+                f"Нарушение инварианта Evidence Reducer: цитата с номером {line_no} "
+                f"не совпадает со строкой источника!"
+            )
+
     @classmethod
-    def reduce(cls, log_text: str, max_blocks: int = 4, context_lines: int = 2) -> Dict[str, Any]:
+    def reduce(cls, log_text: str, max_blocks: int = 4, context_lines: int = 2,
+               exit_code: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Сжимает лог до проверяемой выжимки.
+
+        exit_code, если он известен вызывающему, — авторитетный источник статуса;
+        текстовая эвристика применяется только когда кода возврата нет.
+        """
         raw_bytes = log_text.encode("utf-8")
         full_hash = hashlib.sha256(raw_bytes).hexdigest()
         short_hash = full_hash[:10]
@@ -236,23 +322,27 @@ class EvidenceReducer:
         for b in selected_blocks:
             verified_evidence.append(f"--- [Фрагмент строк {b[0][0]}–{b[-1][0]}] ---")
             for line_no, content_str in b:
-                # Строгая проверка: цитата обязана побайтово существовать в исходном тексте
-                if content_str not in log_text:
-                    raise ValueError(f"Нарушение инварианта Evidence Reducer: цитата '{content_str}' отсутствует в источнике!")
+                cls.verify_citation(lines, line_no, content_str)
                 verified_evidence.append(f"{line_no:5d} | {content_str}")
 
         reduced_evidence_str = "\n".join(verified_evidence)
 
-        # Определение статуса с фильтрацией ложных срабатываний (напр. '0 failed', 'failures=0', 'no errors')
-        has_real_errors = any(pat.search(log_text) for pat in cls.ERROR_PATTERNS)
-        if not has_real_errors:
-            clean_text = re.sub(r"\b(0\s+fail\w*|failures\s*=\s*0|no\s+errors?)\b", "", log_text, flags=re.IGNORECASE)
-            if re.search(r"\b(FAILED|FAILURES|ERRORS?|CRITICAL)\b", clean_text):
-                has_real_errors = True
-        status = "FAILED" if has_real_errors else "COMPLETED"
+        # Определение статуса. Код возврата процесса — факт, текст лога — догадка,
+        # поэтому при известном exit_code текстовая эвристика не применяется вовсе.
+        if exit_code is not None:
+            status = "FAILED" if exit_code != 0 else "COMPLETED"
+            status_source = "exit_code"
+        else:
+            has_real_errors = any(pat.search(log_text) for pat in cls.ERROR_PATTERNS)
+            if not has_real_errors:
+                clean_text = cls.ZERO_COUNT_RE.sub("", log_text)
+                if re.search(r"\b(FAILED|FAILURES|ERRORS?|CRITICAL)\b", clean_text, re.IGNORECASE):
+                    has_real_errors = True
+            status = "FAILED" if has_real_errors else "COMPLETED"
+            status_source = "heuristic"
 
         receipt = f"""[EVIDENCE RECEIPT] Log ID: log_{short_hash}
-Статус: {status}
+Статус: {status} (источник: {status_source})
 Исходный размер: {total_lines} строк ({len(raw_bytes)} байт) -> Выжимка: {len(verified_evidence)} строк
 Архив сырого лога: {log_path}
 
@@ -262,6 +352,7 @@ class EvidenceReducer:
             "receipt": receipt,
             "log_id": f"log_{short_hash}",
             "status": status,
+            "status_source": status_source,
             "log_path": str(log_path),
             "total_lines": total_lines,
             "reduced_lines": len(verified_evidence),
@@ -291,7 +382,7 @@ class ActionFusion:
 
         if len(lines) > log_threshold:
             print(f"[FUSE] Вывод велик ({len(lines)} строк). Применяется Evidence Reducer:")
-            res = EvidenceReducer.reduce(combined_output)
+            res = EvidenceReducer.reduce(combined_output, exit_code=proc.returncode)
             print(res["receipt"])
         else:
             if combined_output:
@@ -300,11 +391,12 @@ class ActionFusion:
         print(f"[FUSE] Завершено с кодом {proc.returncode} за {duration:.2f} сек.")
 
         if proc.returncode == 0:
-            if sync_on_success:
+            if sync_on_success and lessons_changed():
                 try:
                     storage = MemoryStorage()
                     root_dir = get_cache_root().parent
                     count = storage.sync_from_markdown(root_dir)
+                    mark_lessons_synced()
                     if count > 0:
                         print(f"[FUSE:SYNC] Семантическая память обновлена: +{count} уроков.")
                 except Exception as e:
@@ -367,13 +459,24 @@ class VaultAtlas:
                             active_goals.append(clean[:80])
                             if len(active_goals) >= 2:
                                 break
+                    elif line.strip().startswith("- [ ] "):
+                        # Поддержка стандартных markdown-чекбоксов активных задач
+                        clean = line.strip()[6:].strip()
+                        clean = re.sub(r"\[\[.*?\|(.*?)\]\]", r"\1", clean)
+                        clean = re.sub(r"\[\[(.*?)\]\]", r"\1", clean)
+                        active_goals.append(clean[:80])
+                        if len(active_goals) >= 2:
+                            break
 
             lessons_file = self_dir / "Lessons-Learned.md"
             if lessons_file.exists():
                 text = lessons_file.read_text(encoding="utf-8", errors="replace")
                 for line in text.splitlines():
                     if line.startswith("## ") and not line.startswith("## Связано"):
-                        latest_lesson = line[3:].strip()
+                        candidate = line[3:].strip()
+                        if "архив" in candidate.lower():
+                            continue
+                        latest_lesson = candidate
                         break
 
         # 3. Journal stats
@@ -467,7 +570,11 @@ def main():
     p_store.add_argument("--tags", default="", help="Теги через запятую")
 
     # 7. sync (синхронизация уроков)
-    p_sync = subparsers.add_parser("sync", help="Синхронизировать уроки из vault в память SQLite")
+    subparsers.add_parser("sync", help="Синхронизировать уроки из vault в память SQLite")
+
+    # 8. clean (ротация кэша)
+    p_clean = subparsers.add_parser("clean", help="Удалить старые архивы логов и наблюдений")
+    p_clean.add_argument("--days", type=int, default=14, help="Возраст в днях (дефолт 14)")
 
     args = parser.parse_args()
 
@@ -553,11 +660,23 @@ def main():
         storage = MemoryStorage()
         match_res = storage.find_match(args.query, threshold=args.threshold)
         if match_res:
-            rec, score, details = match_res
+            rec = match_res[0]
             print(rec["answer"])
             sys.exit(0)
         else:
-            sys.exit(1)
+            # Если точного совпадения >= threshold нет, ищем релевантные семантические совпадения
+            top_matches = storage.search_top(args.query, top_k=3, min_score=0.35)
+            if top_matches:
+                best_rec, best_score, best_details = top_matches[0]
+                print(f"[SEMANTIC MATCH: {best_score:.2f}] {best_rec['question']}\n")
+                print(best_rec["answer"])
+                if len(top_matches) > 1:
+                    print("\n--- Другие релевантные статьи: ---")
+                    for r, sc, _ in top_matches[1:]:
+                        print(f"  • [{sc:.2f}] {r['question']}")
+                sys.exit(0)
+            else:
+                sys.exit(1)
 
     # --- store ---
     elif args.command == "store":
@@ -571,7 +690,14 @@ def main():
         storage = MemoryStorage()
         root_dir = get_cache_root().parent
         count = storage.sync_from_markdown(root_dir)
+        mark_lessons_synced()
         print(f"[SYNC] Импортировано уроков из markdown: {count}")
+        sys.exit(0)
+
+    # --- clean ---
+    elif args.command == "clean":
+        removed = cleanup_cache(max_age_days=args.days)
+        print(f"[CLEAN] Удалено устаревших файлов кэша (>{args.days} дн.): {removed}")
         sys.exit(0)
 
 

@@ -7,6 +7,7 @@ text.py — Алгоритм схожести текстов без внешни
   2. Коэффициент Жаккара по стеммированным словам — устойчивость к перестановке слов и падежам.
   3. Гардрайлы отрицаний и полярности команд (не/нет, включить/выключить, create/delete) — защита от ложных совпадений с противоположным смыслом.
   4. Очистку от разговорных стоп-слов-паразитов ("подскажи пожалуйста", "как", "what is").
+  5. Query Coverage (покрытие терминов запроса в тексте-кандидате) — точный скоринг коротких запросов против длинных заголовков.
 """
 
 import re
@@ -64,6 +65,8 @@ ANTONYM_PAIRS: List[Tuple[Set[str], Set[str]]] = [
      {"deny", "block", "forbid"}),
 ]
 
+CYRILLIC_RE = re.compile(r"[а-яё]")
+
 RU_ENDINGS_REGEX = re.compile(
     r"(?:[аеёиоуыэюя]|[ыиое]й|[ая]я|[ое]е|[ыи]е|[ыиое]х|[ыи]м|[ыи]ми|[ое]го|[ое]му|[ое]в|[её]й|[ео]м|[ая]ми|ть|ти|ла|ло|ли|ем|им|ут|ют|ат|ят|ешь|ишь|ся|сь)$"
 )
@@ -79,8 +82,15 @@ def normalize_string(text: str) -> str:
 
 
 def extract_words(text: str) -> List[str]:
-    """Извлекает список слов из нормализованного текста."""
-    return re.findall(r"\b[\w-]+\b", text.lower())
+    """Извлекает список слов из нормализованного текста, разделяя по дефисам и спецсимволам."""
+    raw_words = re.findall(r"\b[\w-]+\b", text.lower())
+    result = []
+    for w in raw_words:
+        result.append(w)
+        if "-" in w:
+            parts = [p for p in w.split("-") if p]
+            result.extend(parts)
+    return result
 
 
 def stem_word(w: str) -> str:
@@ -88,15 +98,20 @@ def stem_word(w: str) -> str:
     w = w.lower()
     if len(w) <= 3:
         return w
+    # Ветвление по алфавиту: английские правила к кириллице неприменимы и наоборот,
+    # иначе «process» и «процесс» обрабатываются одним набором суффиксов.
+    if CYRILLIC_RE.search(w):
+        # Русские окончания (в 2 прохода для составных суффиксов)
+        for _ in range(2):
+            w_sub = RU_ENDINGS_REGEX.sub("", w)
+            if len(w_sub) >= 3:
+                w = w_sub
+        return w
+
     # Английские окончания (не отсекаем s после s: pass, class; сохраняем основу >= 3 символов)
     w_en = re.sub(r"(?:ing|ed|es|(?<!s)s)$", "", w)
     if len(w_en) >= 3:
         w = w_en
-    # Русские окончания (в 2 прохода для составных суффиксов)
-    for _ in range(2):
-        w_sub = RU_ENDINGS_REGEX.sub("", w)
-        if len(w_sub) >= 3:
-            w = w_sub
     return w
 
 
@@ -178,17 +193,18 @@ def calculate_similarity(text1: str, text2: str) -> Tuple[float, Dict[str, Any]]
     
     Включает:
       - Проверку на точное совпадение (1.0).
-      - Гардрайл отрицаний (не/нет/без).
+      - Гардрайл отрицаний (не/нет/без) для одинаковых по смыслу фраз.
       - Гардрайл взаимно исключающих команд (включить vs выключить).
       - Символьные 3-граммы (косинус) для устойчивости к опечаткам.
       - Жаккар со стеммингом для учёта морфологии и порядка слов.
+      - Query Coverage (покрытие терминов запроса в кандидате).
     """
     t1_norm = normalize_string(text1)
     t2_norm = normalize_string(text2)
     
     # 1. Точное совпадение
     if t1_norm == t2_norm:
-        return 1.0, {"exact": True, "cosine_3gram": 1.0, "jaccard_words": 1.0, "combined": 1.0}
+        return 1.0, {"exact": True, "cosine_3gram": 1.0, "jaccard_words": 1.0, "query_coverage": 1.0, "combined": 1.0}
     
     words1 = extract_words(t1_norm)
     words2 = extract_words(t2_norm)
@@ -196,16 +212,23 @@ def calculate_similarity(text1: str, text2: str) -> Tuple[float, Dict[str, Any]]
     if not words1 or not words2:
         return 0.0, {"reason": "empty_input", "combined": 0.0}
     
-    # 2. Гардрайл отрицаний: если в одном есть отрицание, а в другом нет
+    # 2. Гардрайл отрицаний: если тексты по смысловой базе почти идентичны,
+    # но один с отрицанием, а другой без — это противоречие ("можно ли X" vs "можно ли не X")
     neg1 = get_negations(words1)
     neg2 = get_negations(words2)
     if bool(neg1) != bool(neg2):
-        return 0.0, {
-            "conflict": "negation_mismatch",
-            "negations1": list(neg1),
-            "negations2": list(neg2),
-            "combined": 0.0
-        }
+        eff1 = filter_meaningful_words([w for w in words1 if w not in NEGATION_WORDS])
+        eff2 = filter_meaningful_words([w for w in words2 if w not in NEGATION_WORDS])
+        st1 = {stem_word(w) for w in eff1}
+        st2 = {stem_word(w) for w in eff2}
+        base_overlap = len(st1 & st2) / max(1, len(st1 | st2)) if st1 or st2 else 0
+        if base_overlap >= 0.65:
+            return 0.0, {
+                "conflict": "negation_mismatch",
+                "negations1": list(neg1),
+                "negations2": list(neg2),
+                "combined": 0.0
+            }
     
     # 3. Гардрайл полярности/антонимов ("включить" vs "выключить")
     if check_antonym_conflict(words1, words2):
@@ -232,12 +255,24 @@ def calculate_similarity(text1: str, text2: str) -> Tuple[float, Dict[str, Any]]
     # 6. Коэффициент Жаккара со стеммингом
     jaccard_score = jaccard_similarity(eff_words1, eff_words2)
     
-    # 7. Комбинированный скор
-    combined = 0.6 * cosine_score + 0.4 * jaccard_score
+    # 7. Query Coverage (степень покрытия поискового запроса в кандидате)
+    stems1 = {stem_word(w) for w in eff_words1}
+    stems2 = {stem_word(w) for w in eff_words2}
+    matched_q = 0
+    for qs in stems1:
+        for ts in stems2:
+            if qs == ts or (len(qs) >= 5 and (qs[:5] in ts or ts[:5] in qs)):
+                matched_q += 1
+                break
+    coverage = matched_q / max(1, len(stems1)) if stems1 else 0.0
+    
+    # Комбинированный скор
+    combined = 0.35 * cosine_score + 0.25 * jaccard_score + 0.40 * coverage
     
     details = {
         "cosine_3gram": round(cosine_score, 4),
         "jaccard_words": round(jaccard_score, 4),
+        "query_coverage": round(coverage, 4),
         "combined": round(combined, 4)
     }
     
