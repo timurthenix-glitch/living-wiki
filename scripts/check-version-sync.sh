@@ -15,13 +15,13 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-plugin_version=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+' .claude-plugin/plugin.json | grep -oE '[0-9]+\.[0-9]+$')
-agents_version=$(grep -oE '^bootstrap_version:[[:space:]]*v?[0-9]+\.[0-9]+' AGENTS.md | grep -oE '[0-9]+\.[0-9]+$')
-skill_version=$(grep -oE '\(skill v[0-9]+\.[0-9]+\)' skills/living-wiki/SKILL.md | grep -oE '[0-9]+\.[0-9]+')
+plugin_version=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+(\.[0-9]+)*' .claude-plugin/plugin.json | grep -oE '[0-9]+(\.[0-9]+)*$')
+agents_version=$(grep -oE '^bootstrap_version:[[:space:]]*v?[0-9]+(\.[0-9]+)*' AGENTS.md | grep -oE '[0-9]+(\.[0-9]+)*$')
+skill_version=$(grep -oE '\(skill v[0-9]+(\.[0-9]+)*\)' skills/living-wiki/SKILL.md | grep -oE '[0-9]+(\.[0-9]+)*')
 
-echo "plugin.json version (major.minor): $plugin_version"
-echo "AGENTS.md bootstrap_version:        $agents_version"
-echo "SKILL.md skill version:             $skill_version"
+echo "plugin.json version:        $plugin_version"
+echo "AGENTS.md bootstrap_version: $agents_version"
+echo "SKILL.md skill version:      $skill_version"
 
 if [[ -z "$plugin_version" || -z "$agents_version" || -z "$skill_version" ]]; then
   echo "::error::Could not extract one of the version fields — check the source files haven't changed format." >&2
@@ -34,12 +34,9 @@ if [[ "$agents_version" != "$skill_version" ]]; then
 fi
 
 ver_ge() {
-  local a_major=${1%%.*} a_minor=${1#*.} b_major=${2%%.*} b_minor=${2#*.}
-  if (( 10#$a_major != 10#$b_major )); then
-    (( 10#$a_major > 10#$b_major ))
-  else
-    (( 10#$a_minor >= 10#$b_minor ))
-  fi
+  local a_major=${1%%.*}
+  local b_major=${2%%.*}
+  (( 10#$a_major >= 10#$b_major ))
 }
 
 if ! ver_ge "$plugin_version" "$agents_version"; then

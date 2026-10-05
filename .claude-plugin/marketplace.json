@@ -8,19 +8,9 @@
   "plugins": [
     {
       "name": "living-wiki",
-      "displayName": "Living Wiki (v0.5.0, experimental — last build 2026-10-04)",
-      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Схема v0.5 (experimental): 3-уровневая модель памяти LOD (status/active/archive), архивация self/Lessons/, защита от раздувания контекста, гибридный семантический поиск SQLite (Query Coverage, fallback >= 0.35, сквозная индексация уроков и wiki), чистота корня и запрет вторых хранилищ.",
+      "displayName": "Living Wiki (v1, финальная)",
+      "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only). Версия 1 (финальная): полный автоматизм фиксации знаний, 3-уровневая модель памяти LOD, архивация self/Lessons/, защита контекста, семантический поиск SQLite, чистота корня хранилища.",
       "source": "."
-    },
-    {
-      "name": "living-wiki-legacy-v0.1",
-      "displayName": "Living Wiki (legacy, schema v0.1)",
-      "description": "Та же вики на более старой схеме v0.1 (минимум 1 связь на странице, без проактивной декомпозиции на смысловые блоки) — для тех, кто уже настроил проект под v0.1 и пока не хочет переходить на v0.3. Зафиксировано на теге living-wiki--v0.2.0 (последний релиз пакета ещё со схемой bootstrap v0.1).",
-      "source": {
-        "source": "github",
-        "repo": "timurthenix-glitch/living-wiki",
-        "ref": "living-wiki--v0.2.0"
-      }
     }
   ]
 }

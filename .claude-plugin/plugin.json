@@ -1,8 +1,8 @@
 {
   "name": "living-wiki",
-  "displayName": "Living Wiki (v0.5.0, experimental — last build 2026-10-04)",
+  "displayName": "Living Wiki (v1, финальная)",
   "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only, без API-ключей и баз данных)",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "author": {
     "name": "timurthenix-glitch"
   },
