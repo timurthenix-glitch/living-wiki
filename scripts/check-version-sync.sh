@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Two invariants, not one:
-#  1. AGENTS.md bootstrap_version and SKILL.md's inline "skill vX.Y" must be
-#     IDENTICAL — they're two copies of the same vault-schema version number,
-#     duplicated only because the skill file format requires frontmatter
-#     instead of a heading (see CHANGELOG.md).
+#  1. AGENTS.md bootstrap_version and SKILL.md's inline "skill v1" must be
+#     IDENTICAL — they're two copies of the same vault-schema version number.
 #  2. plugin.json's semver (major.minor) must be >= that schema version, not
 #     equal to it. The package is free to ship ahead of the schema (hooks,
 #     docs, examples, license — anything that doesn't touch the vault
