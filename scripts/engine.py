@@ -18,7 +18,7 @@ import time
 import hashlib
 import argparse
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 
@@ -440,6 +440,8 @@ class VaultAtlas:
         self_dir = vault_root / "self"
         active_goals = []
         latest_lesson = "Нет данных"
+        lessons_count = 0
+        lessons_chars = 0
         if self_dir.is_dir():
             goals_file = self_dir / "Goals.md"
             if goals_file.exists():
@@ -471,13 +473,15 @@ class VaultAtlas:
             lessons_file = self_dir / "Lessons-Learned.md"
             if lessons_file.exists():
                 text = lessons_file.read_text(encoding="utf-8", errors="replace")
+                lessons_chars = len(text)
                 for line in text.splitlines():
                     if line.startswith("## ") and not line.startswith("## Связано"):
                         candidate = line[3:].strip()
                         if "архив" in candidate.lower():
                             continue
-                        latest_lesson = candidate
-                        break
+                        lessons_count += 1
+                        if latest_lesson == "Нет данных":
+                            latest_lesson = candidate
 
         # 3. Journal stats
         journal_dir = vault_root / "journal"
@@ -495,6 +499,52 @@ class VaultAtlas:
         except Exception:
             mem_stats = {"total_entries": 0, "total_hits": 0}
 
+        # 5. Аномалии — дашборд обязан ловить дыру, а не только описывать состояние.
+        # Молчаливый «Нет данных» там, где данных не может не быть, — это баг контура.
+        anomalies: List[str] = []
+        total_entries = mem_stats.get("total_entries", 0)
+        total_hits = mem_stats.get("total_hits", 0)
+        journal_count = 0
+        if journal_dir.is_dir():
+            date_re_j = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
+            journal_count = len([f for f in journal_dir.glob("*.md") if date_re_j.match(f.name)])
+
+        if total_entries >= 50 and total_hits == 0:
+            anomalies.append(
+                f"память не читается: {total_entries} записей, hits = 0 — "
+                f"контур пишется, но `engine.py match` ни разу не вызывался"
+            )
+        if journal_count >= 1 and (lessons_count == 0 or lessons_chars < 100):
+            anomalies.append(
+                f"дистилляция не идёт: журнал на {journal_count} записей, "
+                f"а активных уроков {lessons_count} — уроки оседают в log.md/journal, а не в self/"
+            )
+        if total_entries == 0 and (lessons_count > 0 or total_wiki_notes > 0):
+            anomalies.append(
+                "память пуста при непустом vault — нужен `python scripts/engine.py sync`"
+            )
+
+        reviews_dir = vault_root / "self" / "Reviews"
+        if reviews_dir.is_dir():
+            review_files = sorted(f.name for f in reviews_dir.glob("*.md"))
+            if not review_files:
+                if journal_count >= 7:
+                    anomalies.append("Review не делался ни разу при живом журнале — см. раздел 4.7")
+            else:
+                m = re.search(r"(\d{4}-\d{2}-\d{2})", review_files[-1])
+                if m:
+                    try:
+                        last_review = date.fromisoformat(m.group(1))
+                        age_days = (date.today() - last_review).days
+                        if age_days >= 7:
+                            anomalies.append(f"просрочен Review: последний {m.group(1)} ({age_days} дн. назад)")
+                    except ValueError:
+                        pass
+
+        anomaly_block = ""
+        if anomalies:
+            anomaly_block = "\n\n*** ВНИМАНИЕ — АНОМАЛИИ КОНТУРА ***\n" + "\n".join(f"!!! {a}" for a in anomalies)
+
         report = f"""==================================================
 [VAULT ATLAS] Статус хранилища Живой Вики (LOD 0)
 Путь: {vault_root}
@@ -506,7 +556,7 @@ class VaultAtlas:
   - Журнал:              {latest_journal} (последняя запись)
 * Семантическая память: {mem_stats.get('total_entries', 0)} записей, hits: {mem_stats.get('total_hits', 0)} (порог >= 0.88)
 * Оптимизация SoL-Pi:    ObservationPack (.cache/obs), Evidence Reducer (.cache/logs)
-==================================================
+=================================================={anomaly_block}
 -> Правило агента: не сканируй файлы целиком. Уточни фокус (цели / уроки / тему) перед углублением."""
 
         return {
@@ -516,7 +566,10 @@ class VaultAtlas:
             "total_wiki_notes": total_wiki_notes,
             "active_goals": active_goals,
             "latest_lesson": latest_lesson,
+            "lessons_count": lessons_count,
             "latest_journal": latest_journal,
+            "journal_count": journal_count,
+            "anomalies": anomalies,
             "memory_stats": mem_stats
         }
 

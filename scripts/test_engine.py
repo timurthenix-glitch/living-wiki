@@ -4,6 +4,7 @@ test_engine.py — Модульные тесты для единого конт�
 """
 
 import re
+import os
 import sys
 import tempfile
 import unittest
@@ -244,6 +245,58 @@ class TestVaultAtlas(unittest.TestCase):
         self.assertIn("vault_root", status_data)
         self.assertIsInstance(status_data["topics"], list)
         self.assertIsInstance(status_data["total_wiki_notes"], int)
+
+    def test_anomaly_write_only_loop_detected(self):
+        # Регрессия на главную проблему: контур пишется (записи есть), но не читается (hits=0),
+        # и уроки оседают в журнале вместо self/. Дашборд обязан это назвать аномалией.
+        from engine import VaultAtlas
+        from storage import MemoryStorage
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            (root / "self" / "Reviews").mkdir(parents=True)
+            (root / "self" / "Lessons-Learned.md").write_text("---\ntitle: Уроки\n---\n", encoding="utf-8")
+            (root / "journal").mkdir()
+            (root / "wiki").mkdir()
+            for i in range(8):
+                (root / "journal" / f"2026-10-{i+1:02d}.md").write_text("x", encoding="utf-8")
+
+            db = root / ".cache" / "memory.db"
+            db.parent.mkdir()
+            storage = MemoryStorage(db_path=db)
+            for i in range(60):
+                storage.store(f"вопрос {i}", f"ответ {i}")
+
+            prev = os.environ.get("LIVING_WIKI_MEMORY_DB")
+            os.environ["LIVING_WIKI_MEMORY_DB"] = str(db)
+            try:
+                data = VaultAtlas.get_status(start_dir=root)
+            finally:
+                if prev is None:
+                    os.environ.pop("LIVING_WIKI_MEMORY_DB", None)
+                else:
+                    os.environ["LIVING_WIKI_MEMORY_DB"] = prev
+
+            joined = " ".join(data["anomalies"])
+            self.assertIn("память не читается", joined)   # 60 записей, hits=0
+            self.assertIn("дистилляция не идёт", joined)  # 8 журналов, 0 уроков
+            self.assertIn("Review", joined)               # архив пуст при живом журнале
+            self.assertIn("АНОМАЛИИ КОНТУРА", data["report"])
+
+    def test_no_false_anomaly_on_healthy_vault(self):
+        # Здоровый vault: уроки есть, память читается — аномалий быть не должно
+        from engine import VaultAtlas
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            (root / "self").mkdir()
+            (root / "self" / "Lessons-Learned.md").write_text(
+                "---\ntitle: Уроки\n---\n\n## Полезный урок\n" + ("текст решения. " * 20),
+                encoding="utf-8",
+            )
+            data = VaultAtlas.get_status(start_dir=root)
+            self.assertEqual(data["anomalies"], [])
+            self.assertEqual(data["lessons_count"], 1)
 
 
 if __name__ == "__main__":
