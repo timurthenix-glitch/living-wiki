@@ -1,73 +1,52 @@
-```ansi
-+--[ LIVING-WIKI // 3D CYBERNETIC VAULT // 1996 EDITION ]--------------------------+
-| [1;32m _     _____ _   _ _____ _   _ _____   _    _ _____ _   ______[0m                   |
-| [1;32m| |   |_   _| | | |_   _| \ | |  __ \ | |  | |_   _| | / /_   _|[0m                 |
-| [1;32m| |     | | | | | | | | |  \| | |  \/ | |  | | | | | |/ /  | |[0m                   |
-| [1;32m| |     | | | | | | | | | . ` | | __  | |/\| | | | |    \  | |[0m                   |
-| [1;32m| |_____| |_\ \_/ /_| |_| |\  | |__\ \ \  /\  /_| |_| |\  \_| |_[0m                 |
-| [1;32m\_____/\___/ \___/ \___/\_| \_/ \____/  \/  \/ \___/\_| \_/\___/[0m                 |
-|                                                                                  |
-| [1;36mSYS_STATUS:[0m [1;32m[ ONLINE ][0m   [1;33mRELEASE:[0m [1;37mv1.0.1 FINAL[0m   [1;35mSTORAGE:[0m [1;37mZERO-DB MARKDOWN[0m       |
-| [36mPROTOCOL:[0m   [37mKarpathy LLM-Wiki[0m   [33mENGINE:[0m [37mSoL-Pi (NVIDIA) + Hermes (Nous)[0m          |
-+----------------------------------------------------------------------------------+
+<p align="center">
+  <img src="https://img.shields.io/badge/TERMINAL-VT220_EMULATOR-00FF66?style=flat-square&logo=gnometerminal&logoColor=000000&labelColor=001100" alt="Terminal">
+  <img src="https://img.shields.io/badge/ARCH-KARPATHY_LLM--WIKI-00F0FF?style=flat-square&logo=markdown&logoColor=000000&labelColor=001122" alt="Architecture">
+  <img src="https://img.shields.io/badge/ENGINE-SOL--PI_%2B_HERMES-FFB000?style=flat-square&logo=python&logoColor=000000&labelColor=221100" alt="Engine">
+  <img src="https://img.shields.io/badge/PROTOCOL-LOD_0_--_1_--_2-D946EF?style=flat-square&logo=sqlite&logoColor=000000&labelColor=1a0022" alt="Protocol">
+  <img src="https://img.shields.io/badge/RELEASE-v1_FINAL-FFFFFF?style=flat-square&logo=git&logoColor=000000&labelColor=111111" alt="Release">
+</p>
+
+```text
+ ╔══════════════════════════════════════════════════════════════════════════════════╗
+ ║  _     _____ _   _ _____ _   _ _____   _    _ _____ _   ______                   ║
+ ║ | |   |_   _| | | |_   _| \ | |  __ \ | |  | |_   _| | / /_   _|                  ║
+ ║ | |     | | | | | | | | |  \| | |  \/ | |  | | | | | |/ /  | |                    ║
+ ║ | |     | | | | | | | | | . ` | | __  | |/\| | | | |    \  | |                    ║
+ ║ | |_____| |_\ \_/ /_| |_| |\  | |__\ \ \  /\  /_| |_| |\  \_| |_                  ║
+ ║ \_____/\___/ \___/ \___/\_| \_/ \____/  \/  \/ \___/\_| \_/\___/                  ║
+ ║                                                                                  ║
+ ║ >> CYBERNETIC KNOWLEDGE VAULT & ZERO-FRICTION SELF-DEVELOPMENT SYSTEM // 1996 << ║
+ ╚══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
-```ansi
-+--[ 3D TERMINAL KNOWLEDGE VAULT // ISOMETRIC VIEW ]-------------------------------+
-|                                                                                  |
-|                   [1;32m+----------------------------------------+[0m                     |
-|                  [1;32m/[0m                                        [1;32m/[0m[32m|[0m                     |
-|                 [1;32m/[0m        [1;37mW I K I   [ L O D   0 ][0m          [1;32m/[0m [32m|[0m                    |
-|                [1;32m/[0m    [36mKarpathy MOC Hubs & [[links]][0m       [1;32m/[0m  [32m|[0m                     |
-|               [1;32m+----------------------------------------+[0m   [32m|[0m                     |
-|               [32m|[0m[90m\                                        [0m[32m|[0m[90m\  [0m[32m|[0m                    |
-|               [32m|[0m [90m\                                       [0m[32m|[0m [90m\ [0m[32m|[0m                    |
-|               [32m|[0m  [90m\                                      [0m[32m|[0m  [90m\[0m[32m|[0m                    |
-|               [32m|[0m   [1;36m+------------------------------------+[0m[32m|[0m   [32m+[0m                    |
-|               [32m|[0m   [1;36m|[0m                                    [1;36m|[0m[32m|[0m  [32m/[0m                     |
-|               [32m|[0m   [1;36m|[0m         [1;37mS E L F   [ L O D   1 ][0m        [1;36m|[0m[32m|[0m [32m/[0m                  |
-|               [32m|[0m   [1;36m|[0m    [33mGoals.md / Habits.md / Skills.md[0m[1;36m|[0m[32m|[0m[32m/[0m                       |
-|               [32m|[0m   [1;36m|[0m    [35mLessons-Learned (< 200 lines)[0m   [1;36m|[0m[32m+[0m                        |
-|               [32m|[0m   [1;36m|[0m                                    [1;36m|[0m [32m/[0m                       |
-|               [32m+---+[1;36m------------------------------------+[0m[32m|[0m[32m/[0m                       |
-|                [32m\  |[0m                                    [32m|[0m                         |
-|                 [32m\|[0m        [1;33mE N G I N E   [ H E R M E S ][0m   [32m|[0m                      |
-|                  [32m+--[0m  [33mZero-LLM SubjectExtractor & Sync[0m  [32m|[0m                        |
-|                     [32m+----------------------------------+[0m                         |
-|                                                                                  |
-+----------------------------------------------------------------------------------+
+<p align="center">
+  <img src="assets/retro-3d-terminal.gif" alt="3D Terminal Wireframe Vault" width="100%">
+</p>
+
+```diff
++ [✓] SYS_CORE:         Karpathy LLM-Wiki Knowledge Topology ........ [ ONLINE ]
++ [✓] STORAGE:          Pure Human-Readable Markdown (Zero-DB) ...... [ MOUNTED]
+! [i] ENGINE_SUITE:     SoL-Pi (Evidence Reducer) + Hermes (Nous) ... [ LOADED ]
+! [i] TOKEN_SHIELD:     LOD-0 Status (~150 tok) & LOD-1 (<200 lines)  [ LOCKED ]
++ [✓] AGENT_LOOP:       Full-Auto Autonomous Background Capture ..... [ ACTIVE ]
 ```
 
-```ansi
-+--[ SYSTEM BOOT & DIAGNOSTICS SEQUENCE ]------------------------------------------+
-|  [1;32m[✓][0m [1;37mINIT_CORE:[0m       [32mKarpathy LLM-Wiki Architecture[0m ............ [1;32m[ READY ][0m      |
-|  [1;32m[✓][0m [1;37mMOUNT_VAULT:[0m     [36mwiki/ self/ journal/ raw/ attachments/[0m ...... [1;32m[ READY ][0m    |
-|  [1;32m[✓][0m [1;37mLOAD_ENGINE:[0m     [33mSoL-Pi (Evidence Reducer & ObsPack)[0m ......... [1;32m[ READY ][0m    |
-|  [1;32m[✓][0m [1;37mLOAD_HERMES:[0m     [35mZero-LLM SubjectExtractor & Cache Audit[0m ..... [1;32m[ READY ][0m    |
-|  [1;32m[✓][0m [1;37mPROMPT_CACHE:[0m    [1;36mOPTIMAL (Strict < 25 KB LOD-1 Budget)[0m ........ [1;32m[ LOCKED][0m   |
-|  [1;32m[✓][0m [1;37mAGENT_LOOP:[0m      [1;32mFull-Auto Background Capture (No Interruption)[0m [1;32m[ ACTIVE][0m   |
-+----------------------------------------------------------------------------------+
-```
-
-> **In English:** A lightweight, self-improving personal knowledge base and self-development loop for AI coding agents (Claude Code, Cursor, Windsurf, Antigravity, Cline, Codex, Gemini CLI). Built entirely on plain Markdown linked with Obsidian-style `[[wikilinks]]` — **zero external databases, zero API keys, zero embeddings**. Install in Claude Code with `/plugin marketplace add timurthenix-glitch/living-wiki` then `/plugin install living-wiki@living-wiki`.
+> **In English:** A lightweight, self-improving personal knowledge base and self-development loop for AI coding agents (*Claude Code, Cursor, Windsurf, Antigravity, Cline, Codex, Gemini CLI*). Built entirely on plain Markdown linked with Obsidian-style `[[wikilinks]]` — **zero external databases, zero API keys, zero embeddings**. Install in Claude Code with `/plugin marketplace add timurthenix-glitch/living-wiki` then `/plugin install living-wiki@living-wiki`.
 
 ---
 
-```ansi
-+--[ 01. SYSTEM MANIFESTO // СУТЬ СИСТЕМЫ ]----------------------------------------+
-```
+### 01. SYSTEM MANIFESTO // СУТЬ СИСТЕМЫ
 
-**Живая Вики** — это Obsidian-совместимая персональная база знаний и контур непрерывного саморазвития, которую ведёт AI-агент:
+**Живая Вики** — это Obsidian-совместимая база знаний и контур непрерывного саморазвития, которую ведёт AI-агент:
+
 1. **Полный автоматизм (Zero-Friction):** Агент сам выявляет уроки, цели, решения, привычки и грабли из контекста диалога и фиксирует их в фоне, не задавая душных вопросов *«хотите, чтобы я это записал?»*.
-2. **Идея Андрея Карпати:** Вместо раздутых векторных баз агент сам ходит по markdown-файлам через `[[двусторонние ссылки]]` и MOC-индексы.
+2. **Архитектура Андрея Карпати:** Вместо раздутых векторных баз агент сам ходит по markdown-файлам через `[[двусторонние ссылки]]` и MOC-индексы (Maps of Content).
 3. **Открыл папку в Obsidian — увидел растущий 3D-граф:** Все данные принадлежат вам, читаются человеком и работают оффлайн в любом текстовом редакторе.
 4. **Технические якоря для вайбкодинга:** Вместо академической воды агент фиксирует уроки по схеме *«Что сделали / Первопричина под капотом / Если тронешь — сломается»*, защищая код от циклической амнезии LLM.
 
 ---
 
-```ansi
-+--[ 02. VAULT ARCHITECTURE & MEMORY HIERARCHY ]-----------------------------------+
-```
+### 02. VAULT ARCHITECTURE & MEMORY HIERARCHY
 
 ```text
  <VAULT_ROOT>/
@@ -90,37 +69,42 @@
  └── journal/                 ── Дневник сессий (<YYYY-MM-DD>.md)
 ```
 
-### 3-уровневая модель памяти (Level of Detail — LOD):
+#### 3-уровневая модель памяти (Level of Detail — LOD):
 * **LOD 0 (Атлас и защита контекста):** `python scripts/engine.py status` — ультра-компактный срез (~150 токенов). Запрещает агенту слепо сканировать файлы базы, сохраняя контекстное окно.
 * **LOD 1 (Рабочий срез уроков):** `self/Lessons-Learned.md` держится строго компактным (до 150–200 строк / ~25 КБ) для сохранения prompt-кэша.
 * **LOD 2 (Исторический архив):** `self/Lessons/` хранит долгосрочный опыт без потери семантического поиска SQLite (`engine.py sync` индексирует и архив, и активные уроки).
 
 ---
 
-```ansi
-+--[ RUNTIME COMMAND MATRIX: scripts/engine.py ]-----------------------------------+
-|                                                                                  |
-|   [1;32m• status[0m          [1;37mLOD 0:[0m [37mСверхкомпактный Атлас хранилища (~150 токенов)[0m        |
-|   [1;36m• audit[0m           [1;37mHERMES:[0m [36mПанель аудита памяти и бюджета prompt-кэша[0m           |
-|   [1;35m• subjects[0m        [1;37mZERO-LLM:[0m [35mДетерминированное извлечение тем и кандидатов[0m      |
-|   [1;33m• digest-today[0m    [1;37mROLLUP:[0m [33mСборка хроники дня из log.md и git в journal/[0m        |
-|   [1;32m• session-start[0m   [1;37mRECORDER:[0m [37mОткрыть компактный буфер рабочей сессии[0m            |
-|   [1;32m• session-close[0m   [1;37mRECORDER:[0m [37mСобрать итог сессии в одну запись без шума[0m         |
-|   [1;36m• fuse "<cmd>"[0m    [1;37mACTION FUSION:[0m [36mЗапуск команды со сжатием логов и синком[0m      |
-|   [1;33m• reduce <log>[0m    [1;37mEVIDENCE REDUCER:[0m [33mСжатие лога с посимвольной проверкой[0m       |
-|   [1;35m• match "<q>"[0m     [1;37mSEMANTIC:[0m [35mПоиск проверенных решений в SQLite (>= 0.88)[0m       |
-|   [1;37m• sync[0m            [1;37mCACHE SYNC:[0m [37mИндексация уроков в семантическую память[0m         |
-|                                                                                  |
-+----------------------------------------------------------------------------------+
+### 03. RUNTIME COMMAND MATRIX (`scripts/engine.py`)
+
+```ini
+[LOD-0_ATLAS]
+status           = Сверхкомпактный атлас хранилища (~150 токенов для экономии контекста)
+
+[HERMES_AUDIT]
+audit            = Панель аудита памяти, структуры тем и целостности prompt-кэша
+subjects         = Zero-LLM детерминированное извлечение тем, сущностей и кандидатов
+digest-today     = Детерминированная сборка хроники дня из log.md и git в journal/
+
+[SESSION_RECORDER]
+session-start    = Открыть компактный буфер рабочей сессии
+session-close    = Собрать итог сессии в одну запись без спама и шума
+
+[SOL-PI_EXECUTION]
+fuse "<cmd>"     = Запуск команды со сжатием логов и фоновой синхронизацией
+reduce <log>     = Сжатие лога с посимвольной проверкой и сохранением сути ошибки
+
+[SEMANTIC_MEMORY]
+match "<query>"  = Поиск проверенных решений в локальном SQLite (порог >= 0.88)
+sync             = Индексация уроков, архивов и заметок wiki/ в семантическую память
 ```
 
 ---
 
-```ansi
-+--[ 03. QUICK START & INSTALLATION ]----------------------------------------------+
-```
+### 04. QUICK START & INSTALLATION
 
-### Вариант A. Claude Code (в 1 команду через маркетплейс)
+#### Вариант A. Claude Code (в 1 команду через маркетплейс)
 
 ```bash
 /plugin marketplace add timurthenix-glitch/living-wiki
@@ -128,7 +112,7 @@
 ```
 После установки просто скажите агенту в любом проекте: `«настрой мне живую вики»`.
 
-### Вариант B. Любой другой агент / IDE (Cursor, Windsurf, Cline, Antigravity, Copilot)
+#### Вариант B. Любой другой агент / IDE (Cursor, Windsurf, Cline, Antigravity, Copilot)
 
 1. Скопируйте файл `AGENTS.md` из этого репозитория в корень вашего проекта.
 2. Скопируйте соответствующий файл-указатель (`.cursor/rules/living-wiki.md`, `.windsurf/rules/living-wiki.md` и т.д.).
@@ -136,9 +120,7 @@
 
 ---
 
-```ansi
-+--[ 04. VERSIONING POLICY // ЕДИНАЯ ВЕРСИЯ v1 ]-----------------------------------+
-```
+### 05. VERSIONING POLICY // ЕДИНАЯ ВЕРСИЯ v1
 
 В проекте действует **строгая политика единой финальной версии v1**:
 * Никаких подверсий, параллельных веток (v2, v1.1) для схемы памяти не создаётся.
@@ -147,6 +129,8 @@
 
 ---
 
-```ansi
-+--[ LICENSE: MIT // AUTHOR: timurthenix-glitch ]----------------------------------+
+```text
+ ╔══════════════════════════════════════════════════════════════════════════════════╗
+ ║  LICENSE: MIT // AUTHOR: timurthenix-glitch // LIVING-WIKI v1 FINAL             ║
+ ╚══════════════════════════════════════════════════════════════════════════════════╝
 ```
