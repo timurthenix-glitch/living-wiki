@@ -1,60 +1,152 @@
-# Living Wiki — живая вики и автоматизация саморазвития
-
-> **In English:** a Claude Code plugin (also usable standalone with any file-reading agent) that sets up and maintains a personal, self-improving knowledge base and journal on plain markdown — `wiki/`, `self/`, `journal/` folders linked with Obsidian-style `[[wikilinks]]`, no database, no API keys, no embeddings. Install with `/plugin marketplace add timurthenix-glitch/living-wiki` then `/plugin install living-wiki@living-wiki` in Claude Code. The rest of this README, and the instructions the agent itself follows (`AGENTS.md`, `skills/living-wiki/SKILL.md`), are in Russian — that's the author's language and the language the resulting vault is written in. The one field that actually needs to be in English for Claude Code to match the skill correctly (`description` in `SKILL.md`'s frontmatter) already is.
-
-Персональная база знаний и дневник саморазвития, которую ведёт AI-агент: обычные markdown-файлы, связанные `[[wikilinks]]`, без базы данных, без API-ключей, без привязки к одному инструменту. Открой папку проекта как vault в Obsidian — увидишь растущий граф.
-
-Идея основана на «LLM wiki» Андрея Карпати (см. [его пост](https://x.com/karpathy)) — вместо векторной базы и embeddings агент сам ходит по markdown-файлам через `[[ссылки]]` и index-файлы, и этого достаточно, пока речь не о тысячах документов.
-
-## Что внутри
-
-- `AGENTS.md` — полный набор правил, самодостаточный файл. Это универсальный fallback: подходит для **любого** агента, который умеет читать файлы проекта (Claude Code, Cursor, Windsurf, Antigravity, Codex, Gemini CLI, обычный чат с доступом к файлам — что угодно).
-- `skills/living-wiki/SKILL.md` + `.claude-plugin/` — та же логика, упакованная как устанавливаемый плагин для Claude Code (см. установку ниже). Ради экономии контекста ядро правил в `SKILL.md` компактное, а детали, нужные не в каждой сессии (разовая настройка, еженедельные обзоры, приём данных со стороны, работа с несколькими агентами), вынесены в `skills/living-wiki/references/*.md` и читаются агентом только по ситуации.
-- `.agents/rules/`, `.cursor/rules/`, `.windsurf/rules/`, `.clinerules/`, `.qoder/rules/`, `.kiro/steering/`, `.junie/guidelines.md`, `.github/copilot-instructions.md` — короткие файлы-указатели на `AGENTS.md` в форматах, которые эти инструменты понимают из коробки. Все восемь — копии одного `templates/rule-pointer.md`; после правки указателя запусти `scripts/sync-rule-pointers.sh`, CI (`scripts/check-rule-pointers.sh`) проверяет, что копии не разошлись. Antigravity (`.agents/rules/living-wiki.md`) не читает файл-указатель сам по себе — его нужно один раз включить в Rules-панели Antigravity (Settings → Rules) с активацией «Always On», иначе он просто лежит в проекте, не подключённый.
-- `hooks/` — два необязательных `SessionStart`-хука. `check-review-due.sh` смотрит на реальные файлы в `self/Reviews/` и, если Weekly/Monthly обзор просрочен, добавляет короткое напоминание в контекст сессии — ускоритель поверх раздела 4.7/6.4 `AGENTS.md`. `vault-lint.sh` сканирует `wiki/` и `self/` на битые `[[wikilinks]]`, страницы-сироты (<2 связей), разросшиеся страницы и файлы вне `index.md` своей темы — молчит, если всё чисто, иначе оставляет короткую сводку; с флагом `--list` печатает файл-за-файлом отчёт, по которому агент делает «Полную уборку» (раздел 4.6 `AGENTS.md`) точечно, не открывая весь vault. Оба хука — ускорители поверх правил `AGENTS.md`, а не замена: агент обязан делать ту же проверку сам, даже если хук не сработал.
-- `scripts/` — единый контур максимальной эффективности (`engine.py`, `storage.py`, `text.py`): локальная семантическая память SQLite (порог >= 0.88, 3-граммы, Жаккар, гардрайлы отрицаний), сверхбыстрый Атлас хранилища (`engine.py status`, ~150 токенов вместо слепого чтения файлов), верифицированное сжатие логов (`reduce`), упаковка наблюдений (`pack`/`recall`) и Action Fusion (`fuse`) по принципам SoL-Pi (NVIDIA Research). Работает в любом агенте без сторонних библиотек.
-- `Session Recorder` (`session-start`, `record`, `session-close`) — компактная фиксация одной рабочей сессии без записи каждого tool call и без файлов для пустых сессий. Для запроса «чекни вики по проекту» используйте сначала `status`: он возвращает LOD-0 карту и защищает контекст от полного сканирования. Общий vault можно проверить через `status --central`, задав `LIVING_WIKI_VAULT` или `~/.living-wiki-path`; кэши проектов разделены.
-- `examples/demo-vault/` — заполненный пример структуры (wiki/self/journal/Reviews), просто для наглядности формата; не устанавливается и не используется агентом.
-- `LICENSE` — MIT.
-
-Все файлы правил синхронизированы по смыслу и версии (`bootstrap_version`, сейчас `v1`, см. `CHANGELOG.md`), а CI (`.github/workflows/checks.yml`) при каждом push/PR проверяет: синхронность указателей, соотношение версий (см. «Версионирование» ниже) и что JSON-манифесты (`plugin.json`, `marketplace.json`, `hooks/hooks.json`) валидны.
-
-## Установка
-
-### Claude Code (одна команда, работает сразу в любом проекте)
-
+```text
+╔═════════════════════════════════════════════════════════════════════════════════════╗
+║   ██╗     ██╗██╗   ██╗██╗███╗   ██╗ ██████╗     ██╗    ██╗██╗██╗  ██╗██╗            ║
+║   ██║     ██║██║   ██║██║████╗  ██║██╔════╝     ██║    ██║██║██║ ██╔╝██║            ║
+║   ██║     ██║██║   ██║██║██╔██╗ ██║██║  ███╗    ██║ █╗ ██║██║█████═╝ ██║            ║
+║   ██║     ██║╚██╗ ██╔╝██║██║╚██╗██║██║   ██║    ██║███╗██║██║██╔═██╗ ██║            ║
+║   ███████╗██║ ╚████╔╝ ██║██║ ╚████║╚██████╔╝    ╚███╔███╔╝██║██║  ██╗██║            ║
+║   ╚══════╝╚═╝  ╚═══╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══╝╚══╝ ╚═╝╚═╝  ╚═╝╚═╝            ║
+║                                                                                     ║
+║   [ LIVING-WIKI // AUTONOMOUS AI SECOND BRAIN // VINTAGE CYBER EDITION ]           ║
+║   SYS_STATUS: [ ONLINE ]   RELEASE: [ v1.0.1 FINAL ]   ARCH: [ ZERO-DB MARKDOWN ]   ║
+╚═════════════════════════════════════════════════════════════════════════════════════╝
 ```
+
+<p align="center">
+  <img src="https://img.shields.io/badge/CORE-KARPATHY%20LLM--WIKI-00ff66?style=for-the-badge&logo=gnubash&logoColor=black" alt="Karpathy Wiki">
+  <img src="https://img.shields.io/badge/ENGINE-SOL--PI%20%2B%20HERMES-00e5ff?style=for-the-badge" alt="SoL-Pi + Hermes">
+  <img src="https://img.shields.io/badge/GRAPH-OBSIDIAN%20NATIVE-9900ff?style=for-the-badge&logo=obsidian&logoColor=white" alt="Obsidian">
+  <img src="https://img.shields.io/badge/CACHE-PROMPT%20SAFE-ff0077?style=for-the-badge" alt="Cache Safe">
+  <img src="https://img.shields.io/badge/VERSION-v1%20FINAL-ffaa00?style=for-the-badge" alt="Version">
+</p>
+
+```text
+┌─[ SYSTEM BOOT & DIAGNOSTICS SEQUENCE ]──────────────────────────────────────────────┐
+│ [✓] INIT_CORE: Karpathy LLM-Wiki Protocol ................................ [ READY ] │
+│ [✓] MOUNT_VAULT: wiki/ self/ journal/ raw/ attachments/ .................. [ READY ] │
+│ [✓] LOAD_ENGINE: SoL-Pi Evidence Reducer & ObservationPack ............... [ READY ] │
+│ [✓] LOAD_HERMES: Zero-LLM SubjectExtractor & Prompt-Cache Auditor ........ [ READY ] │
+│ [✓] AGENT_STATUS: Full-Auto Background Self-Development (No Interruptions) [ ACTIVE] │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+> **In English:** A lightweight, self-improving personal knowledge base and self-development loop for AI coding agents (Claude Code, Cursor, Windsurf, Antigravity, Cline, Codex, Gemini CLI). Built entirely on plain Markdown linked with Obsidian-style `[[wikilinks]]` — **zero external databases, zero API keys, zero embeddings**. Install in Claude Code with `/plugin marketplace add timurthenix-glitch/living-wiki` then `/plugin install living-wiki@living-wiki`.
+
+---
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ [01] SYSTEM MANIFESTO // В ЧЁМ СУТЬ СИСТЕМЫ                                        │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Живая Вики** — это Obsidian-совместимая персональная база знаний и контур непрерывного саморазвития, которую ведёт AI-агент:
+1. **Полный автоматизм (Zero-Friction):** Агент сам выявляет уроки, цели, решения, привычки и грабли из контекста диалога и фиксирует их в фоне, не задавая душных вопросов *«хотите, чтобы я это записал?»*.
+2. **Идея Андрея Карпати:** Вместо раздутых векторных баз агент сам ходит по markdown-файлам через `[[двусторонние ссылки]]` и MOC-индексы.
+3. **Открыл папку в Obsidian — увидел растущий 3D-граф:** Все данные принадлежат вам, читаются человеком и работают оффлайн в любом текстовом редакторе.
+4. **Технические якоря для вайбкодинга:** Вместо академической воды агент фиксирует уроки по схеме *«Что сделали / Первопричина под капотом / Если тронешь — сломается»*, защищая код от циклической амнезии LLM.
+
+---
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ [02] VAULT ARCHITECTURE & MEMORY HIERARCHY (LOD)                                  │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+```text
+ <VAULT_ROOT>/
+ ├── index.md                 ── Главный кибер-индекс и навигационный MOC-хаб
+ ├── log.md                   ── Линейная хроника всех транзакций агента (Append-only)
+ ├── AGENTS.md                ── Единый свод правил и архитектуры памяти (v1)
+ ├── dashboard.html           ── 3D Cyberpunk HUD терминал управления
+ ├── attachments/             ── Скриншоты UI-багов, ошибок и схемы к урокам
+ ├── raw/                     ── Входящий буфер сырых выгрузок и клипов
+ │   └── processed/           ── Обработанные источники после дистилляции в wiki/
+ ├── wiki/                    ── Предметная база объективных знаний (MOC)
+ │   └── <тема>/index.md      ── Тематические хабы заметок
+ ├── self/                    ── Контур саморазвития агента и человека
+ │   ├── Goals.md             ── Активные векторы и цели
+ │   ├── Habits.md            ── Стрики регулярных привычек
+ │   ├── Lessons-Learned.md   ── LOD 1: Активные уроки последних недель (< 200 строк)
+ │   ├── Skills.md            ── Реестр проверенных навыков
+ │   ├── Lessons/             ── LOD 2: Исторический архив уроков (дампы срезов)
+ │   └── Reviews/             ── Еженедельные и ежемесячные ретроспективы
+ └── journal/                 ── Дневник сессий (<YYYY-MM-DD>.md)
+```
+
+### 3-уровневая модель памяти (Level of Detail — LOD):
+* **LOD 0 (Атлас и защита контекста):** `python scripts/engine.py status` — ультра-компактный срез (~150 токенов). Запрещает агенту слепо сканировать файлы базы, сохраняя контекстное окно.
+* **LOD 1 (Рабочий срез уроков):** `self/Lessons-Learned.md` держится строго компактным (до 150–200 строк / ~25 КБ) для сохранения prompt-кэша.
+* **LOD 2 (Исторический архив):** `self/Lessons/` хранит долгосрочный опыт без потери семантического поиска SQLite (`engine.py sync` индексирует и архив, и активные уроки).
+
+---
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ [03] RUNTIME ENGINE // ЭФФЕКТИВНОСТЬ SOL-PI + HERMES                               │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+В проект встроен бескомпромиссный движок эффективности `scripts/engine.py`, объединяющий принципы **NVIDIA SoL-Pi** и **Hermes Agent**:
+
+```text
+┌─[ COMMAND MATRIX: scripts/engine.py ]──────────────────────────────────────────────┐
+│                                                                                    │
+│ 1. status          ── Сверхкомпактный Атлас хранилища (LOD 0, ~150 токенов)        │
+│ 2. audit           ── Панель аудита памяти: вес в токенах и здоровье prompt-кэша   │
+│ 3. subjects        ── Zero-LLM: детерминированное извлечение тем и сущностей       │
+│ 4. digest-today    ── Сборка хроники дня из log.md и git напрямую в журнал         │
+│ 5. session-start   ── Открыть компактный буфер сессии (Session Recorder)           │
+│ 6. session-close   ── Собрать итог сессии в одну запись без дублей и шума          │
+│ 7. fuse "<cmd>"    ── Action Fusion: запуск команды с авто-сжатием логов и синком  │
+│ 8. reduce <log>    ── Evidence Reducer: сжатие лога с посимвольной верификацией    │
+│ 9. match "<query>" ── Локальный семантический поиск проверенных решений (>= 0.88)  │
+│ 10. sync           ── Индексация markdown-уроков в легковесную SQLite память       │
+│                                                                                    │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ [04] QUICK START & INSTALLATION // БЫСТРЫЙ СТАРТ                                   │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Вариант A. Claude Code (в 1 команду через маркетплейс)
+
+```bash
 /plugin marketplace add timurthenix-glitch/living-wiki
 /plugin install living-wiki@living-wiki
 ```
+После установки просто скажите агенту в любом проекте: `«настрой мне живую вики»`.
 
-После установки просто скажи в любом проекте что-то вроде «настрой мне живую вики» — Claude Code сам подхватит skill и создаст структуру. Устанавливать заново в каждом новом проекте не нужно.
+### Вариант B. Любой другой агент / IDE (Cursor, Windsurf, Cline, Antigravity, Copilot)
 
-### Любой другой агент/IDE (Cursor, Windsurf, Cline, Antigravity, Codex, Gemini CLI, GitHub Copilot и т.д.)
+1. Скопируйте файл `AGENTS.md` из этого репозитория в корень вашего проекта.
+2. Скопируйте соответствующий файл-указатель (`.cursor/rules/living-wiki.md`, `.windsurf/rules/living-wiki.md` и т.д.).
+3. Скажите агенту в начале сессии: `«прочитай AGENTS.md, дальше следуй ему»`.
 
-Готового «одна команда — и работает везде» тут нет: большинство таких инструментов читают файлы только из конкретного проекта, а не из глобально установленных плагинов. Поэтому в каждый новый проект, который хочешь превратить в живую вики:
+---
 
-1. Скопируй `AGENTS.md` из этого репозитория в корень проекта.
-2. Если пользуешься инструментом с собственной конвенцией правил (Cursor, Windsurf, Cline, Qoder, Kiro, Junie, GitHub Copilot, Antigravity) — скопируй туда же и соответствующий файл-указатель из этого репозитория (`.cursor/rules/living-wiki.md` и т.д.) — это подстраховка на случай, если инструмент ещё не читает `AGENTS.md` напрямую (многие уже читают). У Antigravity (`.agents/rules/living-wiki.md`) этого недостаточно — файл ещё нужно один раз включить в Settings → Rules с активацией «Always On», у него нет автоматического подхвата файлов из папки без этого шага.
-3. В начале сессии на всякий случай скажи агенту: «прочитай AGENTS.md, дальше следуй ему».
+```text
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ [05] VERSIONING POLICY // ЕДИНАЯ ВЕРСИЯ v1                                         │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-Дальше агент сам создаёт структуру и ведёт её по правилам из `AGENTS.md` — см. содержимое файла.
+В проекте действует **строгая политика единой финальной версии v1**:
+* Никаких подверсий, параллельных веток (v2, v1.1) для схемы памяти не создаётся.
+* Все улучшения (Session Recorder, модули Hermes, технические якоря) вносятся **напрямую в v1** в `AGENTS.md` и `SKILL.md`.
+* Обновление инструкций **никогда не стирает накопленные данные пользователя** (`wiki/`, `self/`, `journal/`, `raw/`, `attachments/`, `log.md`).
 
-### Просто вставить в чат, без репозитория
+---
 
-Можно по-прежнему обойтись без установки чего-либо: скопировать содержимое `AGENTS.md` и вставить в чат с любым агентом внутри нужной папки со словами «настрой это». Плагин/репозиторий нужен только для того, чтобы не делать это вручную каждый раз в новом проекте.
-
-## Версионирование
-
-В проекте действует единая финальная версия **v1**.
-
-- **`bootstrap_version`** (`v1`, в frontmatter `AGENTS.md` и в заголовке `SKILL.md`) — версия схемы vault и правил. Новые улучшения вносятся непосредственно в этот файл. Раздел 2.1 описывает, как агент поддерживает актуальность существующего проекта, никогда не трогая накопленные данные пользователя (`wiki/`, `self/`, `journal/`, `raw/`, `attachments/`, `log.md`).
-- **`version` в `.claude-plugin/plugin.json`** (`1.0.0`) — версия пакета плагина для Claude Code.
-- `scripts/check-version-sync.sh` (в CI) проверяет синхронность: `AGENTS.md` и `SKILL.md` совпадают, а `plugin.json` не отстаёт от схемы.
-- После обновления плагина в коде при необходимости публикуется тег/релиз: `git tag -a living-wiki--v1.0.0 <коммит> && git push origin living-wiki--v1.0.0`.
-
-## Обновление установленного плагина
-
-Claude Code обновляет плагин через marketplace:
-- **Вручную**: `/plugin marketplace update living-wiki`, затем `/reload-plugins`.
-- **Автоматически**: при включённом auto-update (`/plugin` → Marketplaces → `living-wiki` → Enable auto-update).
+```text
+╔═════════════════════════════════════════════════════════════════════════════════════╗
+║  LICENSE: MIT  •  CREATED BY: timurthenix-glitch  •  INSPIRED BY: Andrej Karpathy   ║
+║  "Teach toward reconstruction, preserve context, protect the prompt cache."        ║
+╚═════════════════════════════════════════════════════════════════════════════════════╝
+```
