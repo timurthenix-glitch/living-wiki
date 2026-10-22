@@ -106,6 +106,128 @@ def cleanup_cache(max_age_days: int = 14) -> int:
 
 
 # =====================================================================
+# 0. Session Recorder
+# =====================================================================
+
+class SessionRecorder:
+    """Компактный идемпотентный буфер рабочей сессии.
+
+    В .cache хранится только незавершенное состояние. В vault попадает одна
+    итоговая запись за день и одна строка хронологии, без записи каждого tool call.
+    """
+
+    MAX_EVENTS = 80
+    MAX_EVENT_CHARS = 1200
+    MAX_JOURNAL_CHARS = 10000
+
+    def __init__(self, root: Optional[Path] = None):
+        self.root = (root or VaultAtlas.find_vault_root()).resolve()
+        self.cache_path = self.root / ".cache" / "session.json"
+
+    def _load(self) -> Dict[str, Any]:
+        if not self.cache_path.exists():
+            return {}
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"Не удалось прочитать состояние сессии: {exc}") from exc
+        if not isinstance(data, dict):
+            raise RuntimeError("Состояние сессии повреждено: ожидался JSON-объект")
+        return data
+
+    def start(self) -> Dict[str, Any]:
+        state = self._load()
+        if state.get("started_at") and not state.get("closed_at"):
+            return state
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "cwd": str(Path.cwd().resolve()),
+            "root": str(self.root),
+            "events": [],
+        }
+        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        return state
+
+    def record(self, kind: str, summary: str, detail: str = "", files: Optional[List[str]] = None) -> Dict[str, Any]:
+        state = self.start()
+        summary = " ".join(summary.split()).strip()
+        detail = detail.strip()
+        if not summary:
+            raise ValueError("Нельзя записать пустое событие")
+        event = {
+            "kind": kind.strip() or "work",
+            "summary": summary[:self.MAX_EVENT_CHARS],
+            "detail": detail[:self.MAX_EVENT_CHARS],
+            "files": sorted(set(files or []))[:12],
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        events = state.setdefault("events", [])
+        fingerprint = (event["kind"], event["summary"], event["detail"], tuple(event["files"]))
+        if any((e.get("kind"), e.get("summary"), e.get("detail"), tuple(e.get("files", []))) == fingerprint for e in events):
+            return {"action": "duplicate", "event": event}
+        events.append(event)
+        state["events"] = events[-self.MAX_EVENTS:]
+        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"action": "recorded", "event": event}
+
+    def close(self, lesson: Optional[str] = None) -> Dict[str, Any]:
+        state = self._load()
+        events = state.get("events", [])
+        if not events:
+            return {"action": "empty", "message": "Содержательных событий нет; запись не создана."}
+        today = datetime.now().date().isoformat()
+        journal_dir = self.root / "journal"
+        journal_dir.mkdir(parents=True, exist_ok=True)
+        journal_path = journal_dir / f"{today}.md"
+        summaries = []
+        for event in events:
+            line = f"- **{event.get('kind', 'work')}**: {event.get('summary', '')}"
+            if event.get("detail"):
+                line += f" — {event['detail']}"
+            if event.get("files"):
+                line += f" (`{', '.join(event['files'])}`)"
+            summaries.append(line)
+        block = (
+            f"\n## Сессия {datetime.now().strftime('%H:%M')} UTC\n"
+            + "\n".join(summaries)
+            + "\n"
+        )
+        if journal_path.exists():
+            existing = journal_path.read_text(encoding="utf-8")
+            if block.strip() not in existing:
+                journal_path.write_text((existing.rstrip() + "\n" + block).strip() + "\n", encoding="utf-8")
+        else:
+            journal_path.write_text(
+                f"---\ntitle: Журнал — {today}\ntags: [журнал]\ncreated: {today}\nupdated: {today}\nstatus: факт\n---\n"
+                + block + "\n## Связано\n- [[../index]]\n",
+                encoding="utf-8",
+            )
+        log_path = self.root / "log.md"
+        log_line = f"{today} — сессия: {len(events)} событий зафиксировано в [[journal/{today}]].\n"
+        if log_path.exists():
+            log_text = log_path.read_text(encoding="utf-8")
+            if log_line not in log_text:
+                log_path.write_text(log_text.rstrip() + "\n" + log_line, encoding="utf-8")
+        else:
+            log_path.write_text(log_line, encoding="utf-8")
+        lesson_path = None
+        if lesson and lesson.strip():
+            lesson_path = self.root / "self" / "Lessons-Learned.md"
+            lesson_path.parent.mkdir(parents=True, exist_ok=True)
+            lesson_line = f"\n## {today}: урок\n- {lesson.strip()}\n- Источник: [[../journal/{today}]]\n"
+            existing = lesson_path.read_text(encoding="utf-8") if lesson_path.exists() else (
+                f"---\ntitle: Lessons Learned\ntags: [урок]\ncreated: {today}\nupdated: {today}\nstatus: факт\n---\n"
+            )
+            if lesson.strip() not in existing:
+                lesson_path.write_text(existing.rstrip() + lesson_line, encoding="utf-8")
+        state["closed_at"] = datetime.now(timezone.utc).isoformat()
+        state["events"] = []
+        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"action": "closed", "journal": str(journal_path), "lesson": str(lesson_path) if lesson_path else None}
+
+
+# =====================================================================
 # 1. ObservationPack (pack / recall)
 # =====================================================================
 
@@ -422,6 +544,26 @@ class VaultAtlas:
                 return p
         return current
 
+    @staticmethod
+    def configured_vault_root() -> Optional[Path]:
+        candidates = []
+        env_path = os.environ.get("LIVING_WIKI_VAULT")
+        if env_path:
+            candidates.append(Path(env_path).expanduser())
+        candidates.extend([
+            Path.home() / ".living-wiki-path",
+            Path.home() / ".living-wiki" / "vault-path",
+        ])
+        for candidate in candidates:
+            if candidate.is_file():
+                try:
+                    candidate = Path(candidate.read_text(encoding="utf-8").strip()).expanduser()
+                except OSError as exc:
+                    raise RuntimeError(f"Не удалось прочитать путь центрального vault: {exc}") from exc
+            if candidate.is_dir():
+                return candidate.resolve()
+        return None
+
     @classmethod
     def get_status(cls, start_dir: Optional[Path] = None) -> Dict[str, Any]:
         vault_root = cls.find_vault_root(start_dir)
@@ -494,7 +636,8 @@ class VaultAtlas:
 
         # 4. Memory cache stats
         try:
-            storage = MemoryStorage()
+            db_path = os.environ.get("LIVING_WIKI_MEMORY_DB")
+            storage = MemoryStorage(Path(db_path) if db_path else vault_root / ".cache" / "memory.db")
             mem_stats = storage.stats()
         except Exception:
             mem_stats = {"total_entries": 0, "total_hits": 0}
@@ -590,6 +733,7 @@ def main():
     # 0. status / atlas
     p_status = subparsers.add_parser("status", help="Компактный Атлас хранилища (LOD 0) без расхода контекста")
     p_status.add_argument("--json", action="store_true", help="Вывод в формате JSON")
+    p_status.add_argument("--central", action="store_true", help="Показать настроенный центральный vault")
 
     # 1. pack
     p_pack = subparsers.add_parser("pack", help="Упаковать большой текст/файл в ObservationPack")
@@ -629,6 +773,19 @@ def main():
     p_clean = subparsers.add_parser("clean", help="Удалить старые архивы логов и наблюдений")
     p_clean.add_argument("--days", type=int, default=14, help="Возраст в днях (дефолт 14)")
 
+    # 9. session recorder
+    p_session_start = subparsers.add_parser("session-start", help="Открыть компактный буфер рабочей сессии")
+    p_session_start.add_argument("--root", type=Path, help="Корень vault (по умолчанию определяется автоматически)")
+    p_record = subparsers.add_parser("record", help="Добавить одно содержательное событие в буфер сессии")
+    p_record.add_argument("summary", help="Краткое описание результата")
+    p_record.add_argument("--kind", default="work", help="Тип: decision, change, test, error, lesson, work")
+    p_record.add_argument("--detail", default="", help="Краткая дополнительная деталь")
+    p_record.add_argument("--file", action="append", default=[], help="Измененный файл (можно повторять)")
+    p_record.add_argument("--root", type=Path, help="Корень vault")
+    p_close = subparsers.add_parser("session-close", help="Собрать итог сессии в journal/log и выполнить sync")
+    p_close.add_argument("--lesson", help="Переносимый урок одной строкой; не указывать для обычного итога")
+    p_close.add_argument("--root", type=Path, help="Корень vault")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -637,7 +794,10 @@ def main():
 
     # --- status / atlas ---
     if args.command == "status":
-        status_data = VaultAtlas.get_status()
+        root = VaultAtlas.configured_vault_root() if args.central else None
+        if args.central and root is None:
+            parser.error("Центральный vault не настроен: задайте LIVING_WIKI_VAULT или ~/.living-wiki-path")
+        status_data = VaultAtlas.get_status(root)
         if args.json:
             print(json.dumps(status_data, ensure_ascii=False, indent=2))
         else:
@@ -710,7 +870,8 @@ def main():
 
     # --- match ---
     elif args.command == "match":
-        storage = MemoryStorage()
+        db_path = os.environ.get("LIVING_WIKI_MEMORY_DB")
+        storage = MemoryStorage(Path(db_path) if db_path else recorder.root / ".cache" / "memory.db")
         match_res = storage.find_match(args.query, threshold=args.threshold)
         if match_res:
             rec = match_res[0]
@@ -751,6 +912,28 @@ def main():
     elif args.command == "clean":
         removed = cleanup_cache(max_age_days=args.days)
         print(f"[CLEAN] Удалено устаревших файлов кэша (>{args.days} дн.): {removed}")
+        sys.exit(0)
+
+    # --- session recorder ---
+    elif args.command == "session-start":
+        state = SessionRecorder(args.root).start()
+        print(f"[SESSION] Открыта сессия: {state['started_at']}")
+        sys.exit(0)
+    elif args.command == "record":
+        result = SessionRecorder(args.root).record(args.kind, args.summary, args.detail, args.file)
+        print(f"[SESSION] {result['action']}: {result['event']['summary']}")
+        sys.exit(0)
+    elif args.command == "session-close":
+        recorder = SessionRecorder(args.root)
+        result = recorder.close(args.lesson)
+        if result["action"] == "empty":
+            print(f"[SESSION] {result['message']}")
+            sys.exit(0)
+        storage = MemoryStorage()
+        count = storage.sync_from_markdown(recorder.root)
+        if recorder.root == VaultAtlas.find_vault_root():
+            mark_lessons_synced()
+        print(f"[SESSION] Закрыта: {result['journal']}; память синхронизирована: {count}")
         sys.exit(0)
 
 

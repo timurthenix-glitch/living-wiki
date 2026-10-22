@@ -2,7 +2,7 @@
   "name": "living-wiki",
   "displayName": "Living Wiki (v1, финальная)",
   "description": "Настраивает и ведёт персональную самообновляемую вики + дневник саморазвития (Obsidian-совместимый, markdown-only, без API-ключей и баз данных)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "timurthenix-glitch"
   },

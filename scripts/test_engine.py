@@ -15,7 +15,7 @@ current_dir = Path(__file__).parent.resolve()
 if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
-from engine import ObservationPack, EvidenceReducer, ActionFusion, get_obs_dir, get_logs_dir
+from engine import ObservationPack, EvidenceReducer, ActionFusion, SessionRecorder, get_obs_dir, get_logs_dir
 from storage import MemoryStorage
 
 
@@ -170,6 +170,32 @@ class TestEvidenceReducer(unittest.TestCase):
         self.assertEqual(res2["status_source"], "exit_code")
 
 
+class TestSessionRecorder(unittest.TestCase):
+    def test_empty_session_does_not_create_vault_noise(self):
+        with tempfile.TemporaryDirectory() as d:
+            result = SessionRecorder(Path(d)).close()
+            self.assertEqual(result["action"], "empty")
+            self.assertFalse((Path(d) / "journal").exists())
+
+    def test_records_deduplicates_and_closes_to_one_daily_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            recorder = SessionRecorder(root)
+            first = recorder.record("test", "Проверены тесты", detail="все прошли", files=["scripts/test.py"])
+            duplicate = recorder.record("test", "Проверены тесты", detail="все прошли", files=["scripts/test.py"])
+            self.assertEqual(first["action"], "recorded")
+            self.assertEqual(duplicate["action"], "duplicate")
+            result = recorder.close(lesson="После изменений нужно запускать целевые тесты.")
+            self.assertEqual(result["action"], "closed")
+            journal = Path(result["journal"])
+            self.assertTrue(journal.exists())
+            text = journal.read_text(encoding="utf-8")
+            self.assertEqual(text.count("Проверены тесты"), 1)
+            self.assertIn("scripts/test.py", text)
+            self.assertIn("После изменений", (root / "self" / "Lessons-Learned.md").read_text(encoding="utf-8"))
+            self.assertEqual(recorder.close()["action"], "empty")
+
+
 class TestActionFusion(unittest.TestCase):
     def test_run_command_short_output(self):
         code = ActionFusion.run_command("python -c \"print('test fusion output')\"", sync_on_success=False)
@@ -246,6 +272,18 @@ class TestVaultAtlas(unittest.TestCase):
         self.assertIsInstance(status_data["topics"], list)
         self.assertIsInstance(status_data["total_wiki_notes"], int)
 
+    def test_status_uses_selected_vault_memory(self):
+        from engine import VaultAtlas
+        from storage import MemoryStorage
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            db = root / ".cache" / "memory.db"
+            storage = MemoryStorage(db_path=db)
+            storage.store("проектный вопрос", "проектный ответ")
+            status_data = VaultAtlas.get_status(start_dir=root)
+            self.assertEqual(status_data["memory_stats"]["total_entries"], 1)
+
     def test_anomaly_write_only_loop_detected(self):
         # Регрессия на главную проблему: контур пишется (записи есть), но не читается (hits=0),
         # и уроки оседают в журнале вместо self/. Дашборд обязан это назвать аномалией.
@@ -294,6 +332,9 @@ class TestVaultAtlas(unittest.TestCase):
                 "---\ntitle: Уроки\n---\n\n## Полезный урок\n" + ("текст решения. " * 20),
                 encoding="utf-8",
             )
+            storage = MemoryStorage(db_path=root / ".cache" / "memory.db")
+            storage.store("проверка памяти", "память читается")
+            storage.find_match("проверка памяти")
             data = VaultAtlas.get_status(start_dir=root)
             self.assertEqual(data["anomalies"], [])
             self.assertEqual(data["lessons_count"], 1)
