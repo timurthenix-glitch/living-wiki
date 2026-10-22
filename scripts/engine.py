@@ -1040,7 +1040,7 @@ status: факт
             sec_header = f"## Активность за день ({dt})"
             if sec_header in existing:
                 pattern = rf"## Активность за день \({re.escape(dt)}\)[\s\S]*?(?=\n## |\Z)"
-                updated = re.sub(pattern, block.strip(), existing)
+                updated = re.sub(pattern, lambda m: block.strip(), existing)
             elif "## Связано" in existing:
                 parts = existing.split("## Связано", 1)
                 updated = parts[0].rstrip() + "\n\n" + block + "\n## Связано" + parts[1]
