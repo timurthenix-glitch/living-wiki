@@ -1,11 +1,3 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/TERMINAL-VT220_EMULATOR-00FF66?style=flat-square&logo=gnometerminal&logoColor=000000&labelColor=001100" alt="Terminal">
-  <img src="https://img.shields.io/badge/ARCH-KARPATHY_LLM--WIKI-00F0FF?style=flat-square&logo=markdown&logoColor=000000&labelColor=001122" alt="Architecture">
-  <img src="https://img.shields.io/badge/ENGINE-SOL--PI_%2B_HERMES-FFB000?style=flat-square&logo=python&logoColor=000000&labelColor=221100" alt="Engine">
-  <img src="https://img.shields.io/badge/PROTOCOL-LOD_0_--_1_--_2-D946EF?style=flat-square&logo=sqlite&logoColor=000000&labelColor=1a0022" alt="Protocol">
-  <img src="https://img.shields.io/badge/RELEASE-v1_FINAL-FFFFFF?style=flat-square&logo=git&logoColor=000000&labelColor=111111" alt="Release">
-</p>
-
 ```text
  ╔══════════════════════════════════════════════════════════════════════════════════╗
  ║  _     _____ _   _ _____ _   _ _____   _    _ _____ _   ______                   ║
