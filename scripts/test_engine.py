@@ -340,5 +340,111 @@ class TestVaultAtlas(unittest.TestCase):
             self.assertEqual(data["lessons_count"], 1)
 
 
+
+
+class TestHermesMemoryWikiAdditions(unittest.TestCase):
+    def test_subject_extractor_patterns(self):
+        from engine import SubjectExtractor
+        text = """
+        В проекте используется ModelContextProtocol и ObservationPack.
+        Также важен термин «Живая Вики» и "ActionFusion".
+        Ссылка на [[self/Lessons-Learned|Lessons-Learned]] и [[wiki/prompts/index]].
+        Команда /fuse и /plugin помогают в работе.
+        Стоп-слова: True, false, None, def, class.
+        """
+        counts = SubjectExtractor.extract_from_text(text)
+        self.assertIn("ModelContextProtocol", counts)
+        self.assertIn("ObservationPack", counts)
+        self.assertIn("Lessons-Learned", counts)
+        self.assertIn("Живая Вики", counts)
+        self.assertIn("/fuse", counts)
+        self.assertNotIn("true", counts)
+        self.assertNotIn("none", counts)
+
+    def test_subject_extractor_scan_vault(self):
+        from engine import SubjectExtractor
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            wiki_prompts = root / "wiki" / "prompts"
+            wiki_prompts.mkdir(parents=True)
+            (wiki_prompts / "index.md").write_text("# Prompts", encoding="utf-8")
+            
+            # log with frequent unlinked term
+            (root / "log.md").write_text(
+                "2026-10-23 10:00 — внедрен VectorDatabase для хранилища\n"
+                "2026-10-23 11:00 — оптимизирован VectorDatabase и связка с «Семантический Кэш»\n",
+                encoding="utf-8"
+            )
+            journal = root / "journal"
+            journal.mkdir()
+            (journal / "2026-10-23.md").write_text(
+                "Обсуждали VectorDatabase и «Семантический Кэш». См. [[prompts/index]].",
+                encoding="utf-8"
+            )
+            
+            data = SubjectExtractor.scan_vault(vault_root=root, min_count=2)
+            candidates = [c["entity"] for c in data["candidates"]]
+            self.assertIn("VectorDatabase", candidates)
+            self.assertIn("Семантический Кэш", candidates)
+            report = SubjectExtractor.format_report(data)
+            self.assertIn("[SUBJECT ATLAS]", report)
+            self.assertIn("VectorDatabase", report)
+
+    def test_daily_rollup_digest_and_apply(self):
+        from engine import DailyRollup
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            (root / "log.md").write_text(
+                "2026-10-23 12:00 — создан wiki/rag/index.md по материалам\n"
+                "2026-10-23 12:30 — дистиллирован урок в self/Lessons-Learned.md\n",
+                encoding="utf-8"
+            )
+            digest = DailyRollup.get_daily_digest(vault_root=root, target_date="2026-10-23")
+            self.assertEqual(digest["actions_count"], 2)
+            self.assertIn("wiki/rag/index.md", digest["markdown_block"])
+            self.assertIn("self/Lessons-Learned.md", digest["markdown_block"])
+
+            # Apply to journal
+            j_file, is_new = DailyRollup.apply_to_journal(vault_root=root, target_date="2026-10-23")
+            self.assertTrue(is_new)
+            self.assertTrue(j_file.exists())
+            content = j_file.read_text(encoding="utf-8")
+            self.assertIn("## Активность за день (2026-10-23)", content)
+            self.assertIn("Хроника операций", content)
+
+    def test_memory_auditor(self):
+        from engine import MemoryAuditor
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("# Правила\n" * 50, encoding="utf-8")
+            (root / "self").mkdir()
+            (root / "self" / "Goals.md").write_text("## Активные\n- [ ] Цель 1", encoding="utf-8")
+            (root / "self" / "Lessons-Learned.md").write_text("## Урок 1\nОписание урока.", encoding="utf-8")
+            
+            data = MemoryAuditor.audit(vault_root=root)
+            self.assertEqual(data["cache_status"], "OPTIMAL")
+            self.assertGreater(data["total_est_tokens"], 0)
+            report = MemoryAuditor.format_report(data)
+            self.assertIn("[MEMORY AUDIT]", report)
+            self.assertIn("Гардрайлы в норме", report)
+
+    def test_memory_auditor_warns_on_lessons_bloat(self):
+        from engine import MemoryAuditor
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            (root / "self").mkdir()
+            # 250 lines -> превышает лимит 200 строк LOD 1
+            (root / "self" / "Lessons-Learned.md").write_text(
+                "## Урок\nСтрока.\n" * 125,
+                encoding="utf-8"
+            )
+            data = MemoryAuditor.audit(vault_root=root)
+            self.assertEqual(data["cache_status"], "NEEDS_ATTENTION")
+            self.assertTrue(any("LOD 1 Lessons-Learned.md превышает лимит" in w for w in data["warnings"]))
+
+
 if __name__ == "__main__":
     unittest.main()
