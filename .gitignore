@@ -12,6 +12,9 @@ examples/demo-vault/attachments/*
 *.bmp
 *.avif
 
+# Repository documentation assets
+!assets/*
+
 # OS & editor artifacts
 .DS_Store
 Thumbs.db

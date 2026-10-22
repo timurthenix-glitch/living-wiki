@@ -13,12 +13,15 @@
 ```
 
 <p align="center">
-  <img src="https://img.shields.io/badge/CORE-KARPATHY%20LLM--WIKI-00ff66?style=for-the-badge&logo=gnubash&logoColor=black" alt="Karpathy Wiki">
-  <img src="https://img.shields.io/badge/ENGINE-SOL--PI%20%2B%20HERMES-00e5ff?style=for-the-badge" alt="SoL-Pi + Hermes">
-  <img src="https://img.shields.io/badge/GRAPH-OBSIDIAN%20NATIVE-9900ff?style=for-the-badge&logo=obsidian&logoColor=white" alt="Obsidian">
-  <img src="https://img.shields.io/badge/CACHE-PROMPT%20SAFE-ff0077?style=for-the-badge" alt="Cache Safe">
-  <img src="https://img.shields.io/badge/VERSION-v1%20FINAL-ffaa00?style=for-the-badge" alt="Version">
+  <img src="assets/retro-3d-wireframe.svg" alt="3D Wireframe Cyber Core" width="100%" />
 </p>
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ 3D PIPELINE: SILICON GRAPHICS OPENGL 1.1 WIREFRAME  •  RESOLUTION: 60 FPS VECTOR    │
+│ PROTOCOL: KARPATHY LLM-WIKI  •  ENGINE: SOL-PI + HERMES  •  STORAGE: ZERO-DB (.MD)  │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ```text
 ┌─[ SYSTEM BOOT & DIAGNOSTICS SEQUENCE ]──────────────────────────────────────────────┐
