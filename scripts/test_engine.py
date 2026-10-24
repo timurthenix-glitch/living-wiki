@@ -195,6 +195,66 @@ class TestSessionRecorder(unittest.TestCase):
             self.assertIn("После изменений", (root / "self" / "Lessons-Learned.md").read_text(encoding="utf-8"))
             self.assertEqual(recorder.close()["action"], "empty")
 
+    def test_subagent_isolation_does_not_wipe_parent_session(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            # Родитель начинает работу
+            parent = SessionRecorder(root, agent="main")
+            parent.record("decision", "Родитель начал архитектурный рефакторинг", detail="делегируем тесты")
+
+            # Субагент запускается параллельно
+            subagent = SessionRecorder(root, agent="sub_worker_1")
+            subagent.record("test", "Субагент прогнал тесты auth", detail="найден баг в токене")
+            sub_res = subagent.close(lesson="Токен JWT требует валидации exp")
+
+            self.assertEqual(sub_res["action"], "subagent_closed")
+            self.assertEqual(sub_res["events_merged"], 1)
+
+            # Проверяем, что сессия родителя НЕ стерта, а пополнена агрегированным событием
+            parent_state = parent._load()
+            events = parent_state.get("events", [])
+            self.assertEqual(len(events), 2)
+            self.assertEqual(events[0]["summary"], "Родитель начал архитектурный рефакторинг")
+            self.assertIn("Субагент sub_worker_1", events[1]["summary"])
+
+            # Закрываем родительскую сессию
+            parent_close = parent.close()
+            self.assertEqual(parent_close["action"], "closed")
+
+            journal_text = Path(parent_close["journal"]).read_text(encoding="utf-8")
+            self.assertIn("Родитель начал архитектурный рефакторинг", journal_text)
+            self.assertIn("Субагент sub_worker_1", journal_text)
+
+            # Урок субагента должен быть в Lessons-Learned.md
+            lessons_text = (root / "self" / "Lessons-Learned.md").read_text(encoding="utf-8")
+            self.assertIn("Токен JWT требует валидации exp", lessons_text)
+            self.assertIn("субагент: sub_worker_1", lessons_text)
+
+    def test_harvest_subagent_extracts_technical_anchor(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            subagent_output = """
+            Задача выполнена успешно. Исправлен баг в SQLite драйвере на Windows.
+
+            ### Находки для Живой Вики (Technical Anchor)
+            - **Что сделали**: Добавили busy_timeout=10000 и включили PRAGMA journal_mode=WAL
+            - **Первопричина**: Windows блокирует файловые дескрипторы при параллельном доступе
+            - **Грабли на будущее**: Не отключать WAL в многопроцессном режиме
+            """
+
+            res = SessionRecorder.harvest_subagent(subagent_output, vault_root=root, agent="investigator")
+            self.assertIsNotNone(res)
+            self.assertIn("busy_timeout=10000", res["what"])
+            self.assertIn("Windows блокирует", res["root_cause"])
+            self.assertIn("Не отключать WAL", res["gotchas"])
+
+            lessons_file = root / "self" / "Lessons-Learned.md"
+            self.assertTrue(lessons_file.exists())
+            text = lessons_file.read_text(encoding="utf-8")
+            self.assertIn("технический якорь (субагент: investigator)", text)
+            self.assertIn("busy_timeout=10000", text)
+            self.assertIn("Windows блокирует", text)
+
 
 class TestActionFusion(unittest.TestCase):
     def test_run_command_short_output(self):

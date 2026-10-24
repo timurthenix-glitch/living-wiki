@@ -79,9 +79,10 @@ audit            = Панель аудита памяти, структуры т
 subjects         = Zero-LLM детерминированное извлечение тем, сущностей и кандидатов
 digest-today     = Детерминированная сборка хроники дня из log.md и git в journal/
 
-[SESSION_RECORDER]
-session-start    = Открыть компактный буфер рабочей сессии
+[SESSION_RECORDER & SUBAGENTS]
+session-start    = Открыть компактный буфер рабочей сессии (поддержка --agent <id>)
 session-close    = Собрать итог сессии в одну запись без спама и шума
+harvest-subagent = Извлечь Технический якорь из ответа субагента в Lessons-Learned.md
 
 [SOL-PI_EXECUTION]
 fuse "<cmd>"     = Запуск команды со сжатием логов и фоновой синхронизацией

@@ -114,19 +114,28 @@ def cleanup_cache(max_age_days: int = 14) -> int:
 # =====================================================================
 
 class SessionRecorder:
-    """Компактный идемпотентный буфер рабочей сессии.
+    """Компактный идемпотентный буфер рабочей сессии с поддержкой изоляции субагентов.
 
     В .cache хранится только незавершенное состояние. В vault попадает одна
     итоговая запись за день и одна строка хронологии, без записи каждого tool call.
+    Субагенты ведут изолированные сессии (.cache/sessions/<agent>.json) и при
+    закрытии агрегируются в общую сессию, не затирая буфер родителя.
     """
 
     MAX_EVENTS = 80
     MAX_EVENT_CHARS = 1200
     MAX_JOURNAL_CHARS = 10000
 
-    def __init__(self, root: Optional[Path] = None):
+    def __init__(self, root: Optional[Path] = None, agent: Optional[str] = None):
         self.root = (root or VaultAtlas.find_vault_root()).resolve()
-        self.cache_path = self.root / ".cache" / "session.json"
+        self.agent = (agent.strip() if agent else None)
+        if self.agent and self.agent != "main":
+            sessions_dir = self.root / ".cache" / "sessions"
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+            safe_agent = re.sub(r"[^a-zA-Z0-9_\-]", "_", self.agent)
+            self.cache_path = sessions_dir / f"{safe_agent}.json"
+        else:
+            self.cache_path = self.root / ".cache" / "session.json"
 
     def _load(self) -> Dict[str, Any]:
         if not self.cache_path.exists():
@@ -139,18 +148,24 @@ class SessionRecorder:
             raise RuntimeError("Состояние сессии повреждено: ожидался JSON-объект")
         return data
 
+    def _save(self, state: Dict[str, Any]) -> None:
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.cache_path.with_suffix(f".tmp.{os.getpid()}")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self.cache_path)
+
     def start(self) -> Dict[str, Any]:
         state = self._load()
         if state.get("started_at") and not state.get("closed_at"):
             return state
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         state = {
             "started_at": datetime.now(timezone.utc).isoformat(),
             "cwd": str(Path.cwd().resolve()),
             "root": str(self.root),
+            "agent": self.agent or "main",
             "events": [],
         }
-        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._save(state)
         return state
 
     def record(self, kind: str, summary: str, detail: str = "", files: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -165,6 +180,7 @@ class SessionRecorder:
             "detail": detail[:self.MAX_EVENT_CHARS],
             "files": sorted(set(files or []))[:12],
             "at": datetime.now(timezone.utc).isoformat(),
+            "agent": self.agent or "main",
         }
         events = state.setdefault("events", [])
         fingerprint = (event["kind"], event["summary"], event["detail"], tuple(event["files"]))
@@ -172,7 +188,7 @@ class SessionRecorder:
             return {"action": "duplicate", "event": event}
         events.append(event)
         state["events"] = events[-self.MAX_EVENTS:]
-        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._save(state)
         return {"action": "recorded", "event": event}
 
     def close(self, lesson: Optional[str] = None) -> Dict[str, Any]:
@@ -180,13 +196,51 @@ class SessionRecorder:
         events = state.get("events", [])
         if not events:
             return {"action": "empty", "message": "Содержательных событий нет; запись не создана."}
+
+        # Если это субагент — закрываем его изолированную сессию и агрегируем в родительскую
+        if self.agent and self.agent != "main":
+            parent_recorder = SessionRecorder(self.root, agent="main")
+            sub_summary = f"[Субагент {self.agent}] Завершено {len(events)} операций"
+            details = "; ".join(e.get("summary", "") for e in events[:5])
+            all_files = []
+            for e in events:
+                all_files.extend(e.get("files", []))
+            parent_recorder.record(kind="subagent", summary=sub_summary, detail=details, files=all_files[:12])
+
+            lesson_path = None
+            if lesson and lesson.strip():
+                lesson_path = self.root / "self" / "Lessons-Learned.md"
+                lesson_path.parent.mkdir(parents=True, exist_ok=True)
+                today = datetime.now().date().isoformat()
+                lesson_line = f"\n## {today}: урок (субагент: {self.agent})\n- {lesson.strip()}\n- Источник: [[../journal/{today}]]\n"
+                existing = lesson_path.read_text(encoding="utf-8") if lesson_path.exists() else (
+                    f"---\ntitle: Lessons Learned\ntags: [урок]\ncreated: {today}\nupdated: {today}\nstatus: факт\n---\n"
+                )
+                if lesson.strip() not in existing:
+                    lesson_path.write_text(existing.rstrip() + lesson_line, encoding="utf-8")
+
+            state["closed_at"] = datetime.now(timezone.utc).isoformat()
+            state["events"] = []
+            self._save(state)
+            return {
+                "action": "subagent_closed",
+                "agent": self.agent,
+                "events_merged": len(events),
+                "lesson": str(lesson_path) if lesson_path else None,
+                "journal": "агрегировано в буфер родительской сессии"
+            }
+
+        # Основная сессия: запись в journal/<today>.md и log.md
         today = datetime.now().date().isoformat()
         journal_dir = self.root / "journal"
         journal_dir.mkdir(parents=True, exist_ok=True)
         journal_path = journal_dir / f"{today}.md"
         summaries = []
         for event in events:
-            line = f"- **{event.get('kind', 'work')}**: {event.get('summary', '')}"
+            prefix = f"- **{event.get('kind', 'work')}**"
+            if event.get("agent") and event.get("agent") != "main":
+                prefix += f" [{event['agent']}]"
+            line = f"{prefix}: {event.get('summary', '')}"
             if event.get("detail"):
                 line += f" — {event['detail']}"
             if event.get("files"):
@@ -227,9 +281,89 @@ class SessionRecorder:
                 lesson_path.write_text(existing.rstrip() + lesson_line, encoding="utf-8")
         state["closed_at"] = datetime.now(timezone.utc).isoformat()
         state["events"] = []
-        self.cache_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._save(state)
         return {"action": "closed", "journal": str(journal_path), "lesson": str(lesson_path) if lesson_path else None}
 
+    @classmethod
+    def harvest_subagent(cls, text: str, vault_root: Optional[Path] = None, agent: str = "subagent") -> Optional[Dict[str, str]]:
+        """
+        Извлекает технический якорь или находки из вывода субагента
+        и фиксирует их в self/Lessons-Learned.md и буфере сессии.
+        """
+        root = (vault_root or VaultAtlas.find_vault_root()).resolve()
+
+        p = Path(text)
+        if p.is_file():
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+        what = ""
+        root_cause = ""
+        gotchas = ""
+
+        m_what = re.search(r"(?:Что сделали|Решение|What was done)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
+        m_cause = re.search(r"(?:Первопричина|Причина|Физика бага|Root cause)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
+        m_gotchas = re.search(r"(?:Грабли на будущее|Грабли|Не трогать|Gotchas)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
+
+        if m_what:
+            what = m_what.group(1).strip()
+        if m_cause:
+            root_cause = m_cause.group(1).strip()
+        if m_gotchas:
+            gotchas = m_gotchas.group(1).strip()
+
+        if not what and not root_cause:
+            m_block = re.search(r"###\s+(?:Находки для Живой Вики|Living Wiki Findings|Technical Anchor)[\s\S]*?(?=\n###|\Z)", text, re.IGNORECASE)
+            if m_block:
+                block_content = m_block.group(0).strip()
+                lines = [l.strip("- *").strip() for l in block_content.splitlines() if l.strip() and not l.startswith("###")]
+                if lines:
+                    what = lines[0]
+                    if len(lines) > 1:
+                        root_cause = lines[1]
+                    if len(lines) > 2:
+                        gotchas = lines[2]
+
+        if not what:
+            return None
+
+        today = datetime.now().date().isoformat()
+        lesson_file = root / "self" / "Lessons-Learned.md"
+        lesson_file.parent.mkdir(parents=True, exist_ok=True)
+
+        anchor_lines = [
+            f"\n## {today}: технический якорь (субагент: {agent})",
+            f"- **Что сделали**: {what}",
+        ]
+        if root_cause:
+            anchor_lines.append(f"- **Первопричина**: {root_cause}")
+        if gotchas:
+            anchor_lines.append(f"- **Грабли на будущее**: {gotchas}")
+        anchor_lines.append(f"- Источник: [[../journal/{today}]]\n")
+
+        anchor_text = "\n".join(anchor_lines)
+        existing = lesson_file.read_text(encoding="utf-8") if lesson_file.exists() else (
+            f"---\ntitle: Lessons Learned\ntags: [урок]\ncreated: {today}\nupdated: {today}\nstatus: факт\n---\n"
+        )
+        if what not in existing:
+            lesson_file.write_text(existing.rstrip() + anchor_text, encoding="utf-8")
+
+        recorder = cls(root, agent="main")
+        recorder.record(
+            kind="lesson",
+            summary=f"Харвест субагента ({agent}): {what[:100]}",
+            detail=root_cause[:200]
+        )
+
+        return {
+            "agent": agent,
+            "what": what,
+            "root_cause": root_cause,
+            "gotchas": gotchas,
+            "saved_to": str(lesson_file)
+        }
 
 # =====================================================================
 # 1. ObservationPack (pack / recall)
@@ -1253,15 +1387,24 @@ def main():
 # 9. session recorder
     p_session_start = subparsers.add_parser("session-start", help="Открыть компактный буфер рабочей сессии")
     p_session_start.add_argument("--root", type=Path, help="Корень vault (по умолчанию определяется автоматически)")
+    p_session_start.add_argument("--agent", default=None, help="Идентификатор агента/субагента для изоляции сессий")
     p_record = subparsers.add_parser("record", help="Добавить одно содержательное событие в буфер сессии")
     p_record.add_argument("summary", help="Краткое описание результата")
     p_record.add_argument("--kind", default="work", help="Тип: decision, change, test, error, lesson, work")
     p_record.add_argument("--detail", default="", help="Краткая дополнительная деталь")
     p_record.add_argument("--file", action="append", default=[], help="Измененный файл (можно повторять)")
     p_record.add_argument("--root", type=Path, help="Корень vault")
+    p_record.add_argument("--agent", default=None, help="Идентификатор агента/субагента")
     p_close = subparsers.add_parser("session-close", help="Собрать итог сессии в journal/log и выполнить sync")
     p_close.add_argument("--lesson", help="Переносимый урок одной строкой; не указывать для обычного итога")
     p_close.add_argument("--root", type=Path, help="Корень vault")
+    p_close.add_argument("--agent", default=None, help="Идентификатор агента/субагента")
+
+    # 9.1 harvest subagent findings
+    p_harvest = subparsers.add_parser("harvest-subagent", help="Извлечь технический якорь/урок из ответа субагента")
+    p_harvest.add_argument("text", help="Текст ответа субагента (или путь к файлу с выводом)")
+    p_harvest.add_argument("--agent", default="subagent", help="Имя или ID субагента")
+    p_harvest.add_argument("--root", type=Path, help="Корень vault")
 
 # 10. subjects (Zero-LLM Topic Indexing)
     p_subj = subparsers.add_parser("subjects", help="Детерминированный поиск тем и кандидатов в wiki (Zero-LLM)")
@@ -1409,15 +1552,15 @@ def main():
 
 # --- session recorder ---
     elif args.command == "session-start":
-        state = SessionRecorder(args.root).start()
+        state = SessionRecorder(args.root, agent=args.agent).start()
         print(f"[SESSION] Открыта сессия: {state['started_at']}")
         sys.exit(0)
     elif args.command == "record":
-        result = SessionRecorder(args.root).record(args.kind, args.summary, args.detail, args.file)
+        result = SessionRecorder(args.root, agent=args.agent).record(args.kind, args.summary, args.detail, args.file)
         print(f"[SESSION] {result['action']}: {result['event']['summary']}")
         sys.exit(0)
     elif args.command == "session-close":
-        recorder = SessionRecorder(args.root)
+        recorder = SessionRecorder(args.root, agent=args.agent)
         result = recorder.close(args.lesson)
         if result["action"] == "empty":
             print(f"[SESSION] {result['message']}")
@@ -1426,7 +1569,17 @@ def main():
         count = storage.sync_from_markdown(recorder.root)
         if recorder.root == VaultAtlas.find_vault_root():
             mark_lessons_synced()
-        print(f"[SESSION] Закрыта: {result['journal']}; память синхронизирована: {count}")
+        print(f"[SESSION] Закрыта: {result.get('journal', 'OK')}; память синхронизирована: {count}")
+
+    elif args.command == "harvest-subagent":
+        res = SessionRecorder.harvest_subagent(args.text, vault_root=args.root, agent=args.agent)
+        if res:
+            storage = MemoryStorage()
+            storage.sync_from_markdown(args.root or VaultAtlas.find_vault_root())
+            print(f"[HARVEST] Успешно зафиксирован технический якорь от {res['agent']}: {res['what']}")
+        else:
+            print("[HARVEST] В выводе не обнаружен блок технических находок или якоря.")
+        sys.exit(0 if res else 1)
 
 # --- subjects (Zero-LLM Topic Indexing) ---
     elif args.command == "subjects":
