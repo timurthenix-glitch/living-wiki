@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Optional accelerator for AGENTS.md / SKILL.md section 4.6 ("Полная уборка") —
 # a best-effort structural audit of the wikilink graph, not a replacement. It
-# only detects (broken [[links]], orphan pages with <2 connections, pages over
+# only detects (broken [[links]], pages with zero connections, pages over
 # the size threshold, pages missing from their topic index.md, orphan attachments,
 # and image embeds lacking text distillation) — every fix (merge a duplicate, pick
 # which link to add, how to split a page, prune unused images) stays with the agent.
@@ -31,7 +31,7 @@ trap 'rm -rf "$TMP"' EXIT
   find "$PROJECT_DIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null
 } | sort -u > "$TMP/all_files.txt"
 
-# Files actually graded against the "2-3 links" / size / topic-index rules:
+# Files actually graded against the "has at least one link" / size / topic-index rules:
 # only pages inside wiki/ and self/ (AGENTS.md sec. 1) — self/Reviews/ and
 # self/Lessons/ are dated logs like journal/, not active graph nodes, and root-level files
 # (index.md, log.md, AGENTS.md) aren't wiki pages either.
@@ -170,7 +170,7 @@ while IFS= read -r file; do
   out_n=$(grep -c -x -F "$file" "$TMP/outbound.txt" 2>/dev/null); out_n=${out_n:-0}
   in_n=$(grep -c -x -F "$file" "$TMP/inbound.txt" 2>/dev/null); in_n=${in_n:-0}
   total=$(( out_n + in_n ))
-  if (( total < 2 )); then
+  if (( total < 1 )); then
     printf '%s (связей: %d)\n' "$file" "$total" >> "$TMP/orphans.txt"
   fi
 
@@ -226,7 +226,7 @@ if [[ "$MODE" == "list" ]]; then
   fi
   echo "[vault-lint] Найдено: битых ссылок $broken_n, страниц-сирот $orphans_n, разросшихся страниц $oversized_n, вне индекса темы $unindexed_n, сирот-вложений $orphan_att_n, вложений без текста $unexplained_att_n."
   if (( broken_n > 0 )); then echo; echo "-- Битые ссылки --"; cat "$TMP/broken.txt"; fi
-  if (( orphans_n > 0 )); then echo; echo "-- Страницы-сироты (<2 связей) --"; cat "$TMP/orphans.txt"; fi
+  if (( orphans_n > 0 )); then echo; echo "-- Страницы-сироты (0 связей) --"; cat "$TMP/orphans.txt"; fi
   if (( oversized_n > 0 )); then echo; echo "-- Разросшиеся страницы (>200 строк / >2000 слов) --"; cat "$TMP/oversized.txt"; fi
   if (( unindexed_n > 0 )); then echo; echo "-- Не упомянуты в index.md своей темы --"; cat "$TMP/unindexed.txt"; fi
   if (( orphan_att_n > 0 )); then echo; echo "-- Неиспользуемые вложения в attachments/ (сироты) --"; cat "$TMP/orphan_attachments.txt"; fi

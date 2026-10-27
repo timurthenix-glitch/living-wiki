@@ -9,15 +9,19 @@
   index.md
   log.md
   AGENTS.md                    — единственный полный источник правил для ЭТОГО проекта:
-                                  копия файла AGENTS.md из корня этого репозитория
-                                  (путь от этого файла: ../../../AGENTS.md), целиком,
-                                  с тем же frontmatter bootstrap_version
+                                  копия файла AGENTS.md из корня этого репозитория,
+                                  целиком, с тем же frontmatter (bootstrap_version, rules_hash)
+  skills/
+    living-wiki/               — слой правил, не заметки: копия skills/living-wiki/
+      SKILL.md                   из репозитория (SKILL.md + references/*.md).
+      references/*.md            Без неё пути из AGENTS.md ведут в пустоту.
   attachments/                 — локальные вложения (скриншоты ошибок, UI-багов, схемы)
     .gitkeep
   raw/
     processed/
       .gitkeep
   wiki/
+    <тема>/index.md             — появляется с первой реальной страницей темы
   self/
     index.md
     Goals.md
@@ -35,6 +39,8 @@
   crm/
     .gitkeep
 ```
+
+Файлы-указатели (`CLAUDE.md`, `.cursor/rules/living-wiki.md`, `.agents/rules/living-wiki.md` и т.д.) — по одному на инструмент, который не читает `AGENTS.md` сам; их копии лежат в репозитории и синхронизируются `scripts/sync-rule-pointers.sh`.
 
 - `index.md` — оглавление верхнего уровня: ссылка на `[[self/index]]`, по ссылке на `index.md` каждой темы в `wiki/`, ссылка на сегодняшний `journal/`.
 - `wiki/<тема>/index.md` — создавай подпапку и index только когда появилась первая реальная страница по теме, не заранее.
