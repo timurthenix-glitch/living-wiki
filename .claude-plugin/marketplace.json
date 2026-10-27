@@ -14,8 +14,8 @@
     },
     {
       "name": "living-wiki-legacy-v0.1",
-      "displayName": "Living Wiki (legacy, schema v0.1)",
-      "description": "Та же вики на более старой схеме v0.1 (минимум 1 связь на странице, без проактивной декомпозиции на смысловые блоки) — для тех, кто уже настроил проект под v0.1 и пока не хочет переходить на v0.3. Зафиксировано на теге living-wiki--v0.2.0 (последний релиз пакета ещё со схемой bootstrap v0.1).",
+      "displayName": "Living Wiki (legacy, Obsidian vault)",
+      "description": "Старая схема — Obsidian-вики на страницах: wiki/, self/, journal/, raw/, attachments/, [[wikilinks]] и правило 2–3 связей. Для тех, кто уже ведёт такой vault и не хочет переезжать на MEMORY.md. Зафиксировано на теге living-wiki--v0.2.0; в актуальной ветке этой схемы больше нет.",
       "source": {
         "source": "github",
         "repo": "timurthenix-glitch/living-wiki",
