@@ -235,7 +235,7 @@ if [[ "$MODE" == "list" ]]; then
 fi
 
 if (( total > 0 )); then
-  msg="[living-wiki] vault-lint: битых $broken_n, сирот $orphans_n, разросшихся $oversized_n, вне индекса $unindexed_n, сирот-вложений $orphan_att_n, вложений без текста $unexplained_att_n. Запусти hooks/vault-lint.sh --list и разберись при полной уборке (AGENTS.md раздел 4.6)."
+  msg="[living-wiki] vault-lint: битых $broken_n, сирот $orphans_n, разросшихся $oversized_n, вне индекса $unindexed_n, сирот-вложений $orphan_att_n, вложений без текста $unexplained_att_n. Запусти hooks/vault-lint.sh --list и разберись при полной уборке (AGENTS.md раздел 5.6)."
   msg_escaped=$(printf '%s' "$msg" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
   printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$msg_escaped"
 fi
