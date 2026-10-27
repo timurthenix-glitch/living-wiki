@@ -3,9 +3,11 @@ name: living-wiki
 description: Set up or maintain a personal, self-improving Obsidian-compatible knowledge base and self-improvement journal (plain markdown wiki/self/journal folders linked with [[wikilinks]], viewable as a graph in Obsidian). Use when the user asks to set up a personal wiki, second brain, living memory, self-improvement tracker/journal, or an Obsidian-based knowledge base for an AI agent — in this project or a new one. Do NOT use this for generating technical/API/architecture documentation from a codebase, or a team/project wiki — this skill is only for personal knowledge and self-improvement tracking.
 ---
 
-# ЖИВАЯ ВИКИ — память и автоматизация саморазвития (skill v0.6) — experimental
+# ЖИВАЯ ВИКИ — память и автоматизация саморазвития (skill v1)
 
-Если в текущем проекте уже есть файл `AGENTS.md` — не перечитывай его целиком: с v0.6 это тонкое ядро (роль, инварианты, цикл), а процедуры — здесь. Достаточно один раз за сессию свериться с его frontmatter `bootstrap_version`: совпадает с версией этой skill (см. заголовок) — ничего не делай; отличается или файла ещё нет — см. `references/setup.md`.
+Версия одна и окончательная — **v1**. Ни подверсий, ни минорных номеров: улучшения вносятся прямо в v1, а устарела ли копия правил в проекте — определяется `rules_hash` (`scripts/rules-hash.sh`), а не цифрой.
+
+Если в текущем проекте уже есть файл `AGENTS.md` — не перечитывай его целиком: это тонкое ядро (роль, инварианты, цикл), а процедуры — здесь. Сверь один раз `rules_hash` в его frontmatter с хэшем этой копии: совпал — ничего не делай; отличается или файла ещё нет — см. `references/setup.md`.
 
 Ниже — только то, что нужно держать в голове в каждом сообщении/сессии. Остальное вынесено в `references/` и читается по ситуации, а не заранее:
 
@@ -74,6 +76,8 @@ status: факт | вывод | противоречие
 **6.1 Триггеры** — сигналы вроде «я решил…», «хочу начать/бросить…», «заметил, что…», «урок:», «моя цель…» в любом сообщении → сразу обнови нужную страницу `self/`, потом отвечай по делу.
 
 **6.2 Стрики привычек** прямо в `Habits.md`: `- 2026-09-08 ✅ · 2026-09-09 ❌`.
+
+**6.2.1 Аудит конца сессии** — сам, без просьбы: что сработало и что сломалось за сессию. Хорошее → скил или подтверждение существующего, плохое → урок или правка скила. Пользователь не говорит «запиши» — это работа агента.
 
 **6.3 Скилы** — повторяемая процедура (дважды повторилась, или выяснялась дольше нескольких шагов, или пользователь сказал «запомни, как делать») становится скилом в `self/skills/<имя>/SKILL.md` с индексом в `self/Skills.md`. После задачи, где скил пригодился, допиши в него строку в императиве; подвёл дважды — перепиши шаги. Скил — «как делать», урок — «что известно». Формат — `references/skills.md`, скелет — `templates/skill.md`.
 
