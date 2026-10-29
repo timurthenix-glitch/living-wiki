@@ -1,32 +1,9 @@
-# Personal attachments & screenshots (do not commit user images to repo)
-attachments/*
-!attachments/.gitkeep
-examples/demo-vault/attachments/*
-!examples/demo-vault/attachments/.gitkeep
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.svg
-*.bmp
-*.avif
-
-# Repository documentation assets
-!assets/*
-
 # OS & editor artifacts
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# Local memory cache & databases
-.cache/
-*.db
-*.sqlite
-*.sqlite3
 
 # Python bytecode
 __pycache__/

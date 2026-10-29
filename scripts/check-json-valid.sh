@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cheap syntax-only fallback for the plugin/marketplace/hook JSON files — no
+# Cheap syntax-only fallback for the plugin/marketplace JSON manifests — no
 # external dependency beyond python3, which GitHub's ubuntu-latest runner
 # ships by default. This only proves the files parse as JSON; it does not
 # check plugin manifest semantics the way `claude plugin validate --strict`
@@ -25,7 +25,6 @@ fi
 files=(
   ".claude-plugin/plugin.json"
   ".claude-plugin/marketplace.json"
-  "hooks/hooks.json"
 )
 
 fail=0
