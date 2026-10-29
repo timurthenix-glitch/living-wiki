@@ -30,8 +30,8 @@ def main():
     except Exception:
         sys.exit(0)
 
-    tool_name = data.get("toolName", "")
-    tool_input = data.get("toolInput", {})
+    tool_name = data.get("toolName", "") or ""
+    tool_input = data.get("toolInput", {}) or {}
     tool_result = data.get("toolResult", {})
 
     is_error = False
@@ -47,9 +47,29 @@ def main():
             is_error = True
             error_summary = tool_result[:200]
 
+    # Hook-событие может отдать результат в других полях; для правок файлов
+    # (Edit/Write) это обычно текст ошибки без маркеров Bash.
+    if not is_error:
+        for key in ("error", "toolError", "errorMessage"):
+            value = data.get(key)
+            if value:
+                is_error = True
+                error_summary = str(value)[:200]
+                break
+
     if is_error:
-        cmd_str = tool_input.get("command", "") if isinstance(tool_input, dict) else str(tool_input)
-        cmd_summary = f"{tool_name}: {cmd_str[:80]}" if cmd_str else tool_name
+        if not isinstance(tool_input, dict):
+            tool_input = {}
+        # У Edit/Write/NotebookEdit нет "command" — раньше cmd_summary
+        # деградировал до голого имени инструмента без файла.
+        cmd_str = (
+            tool_input.get("command")
+            or tool_input.get("file_path")
+            or tool_input.get("notebook_path")
+            or tool_input.get("path")
+            or ""
+        )
+        cmd_summary = f"{tool_name}: {cmd_str[:80]}" if cmd_str else (tool_name or "инструмент")
 
         try:
             root = Path(__file__).resolve().parent.parent

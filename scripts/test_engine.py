@@ -317,10 +317,26 @@ class TestStoreDedup(unittest.TestCase):
 class TestVaultAtlas(unittest.TestCase):
     def test_get_status_on_empty_dir(self):
         from engine import VaultAtlas
-        # Пустой каталог без wiki/ и self/ не должен ронять атлас
+        # Пустой каталог БЕЗ wiki/ и self/ — это не «пустой vault», а
+        # «vault не настроен»: дашборд обязан назвать это прямо, иначе
+        # пользователь ищет данные, которых здесь никогда не было.
         with tempfile.TemporaryDirectory() as d:
             status_data = VaultAtlas.get_status(start_dir=Path(d))
             self.assertIn("[VAULT ATLAS]", status_data["report"])
+            self.assertFalse(status_data["found"])
+            self.assertIn("НЕ НАСТРОЕН", status_data["report"])
+            self.assertEqual(status_data["topics"], [])
+
+    def test_get_status_on_configured_empty_vault(self):
+        from engine import VaultAtlas
+        # vault настроен (есть self/), но данных ещё нет — здесь допустим
+        # обычный дашборд с нулями, без предупреждения о настройке.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "self").mkdir()
+            status_data = VaultAtlas.get_status(start_dir=root)
+            self.assertTrue(status_data["found"])
+            self.assertNotIn("НЕ НАСТРОЕН", status_data["report"])
             self.assertEqual(status_data["topics"], [])
 
     def test_get_status_returns_report(self):
@@ -337,7 +353,7 @@ class TestVaultAtlas(unittest.TestCase):
         from storage import MemoryStorage
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            (root / "AGENTS.md").write_text("x", encoding="utf-8")
+            (root / "self").mkdir()
             db = root / ".cache" / "memory.db"
             storage = MemoryStorage(db_path=db)
             storage.store("проектный вопрос", "проектный ответ")

@@ -11,9 +11,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Rule-pointer files are in sync with templates/rule-pointer.md
         run: bash scripts/check-rule-pointers.sh
+
       - name: plugin.json / AGENTS.md / SKILL.md versions are in sync
         run: bash scripts/check-version-sync.sh
+
       - name: JSON manifests parse
         run: bash scripts/check-json-valid.sh
+
+      # Bug-регрессия: `engine.py match` падал с UnboundLocalError в любом
+      # каталоге, и ни один существовавший тест этого не ловил, потому что
+      # все они импортировали классы, а не вызывали main().
+      - name: Python test suites (classes + CLI entry point)
+        run: |
+          set -euo pipefail
+          cd scripts
+          for suite in test_engine.py test_memory.py test_cli.py; do
+            echo "::group::$suite"
+            python3 "$suite"
+            echo "::endgroup::"
+          done
+
+      - name: CLI smoke — every read-only subcommand exits cleanly
+        run: |
+          set -euo pipefail
+          vault="$(mktemp -d)"
+          mkdir -p "$vault/self" "$vault/wiki/demo"
+          printf -- '---\ntitle: Уроки\n---\n\n## Урок\nПроверенный урок.\n' > "$vault/self/Lessons-Learned.md"
+          for cmd in status audit subjects sync digest-today clean; do
+            echo "--- engine.py $cmd"
+            ( cd "$vault" && python3 "$GITHUB_WORKSPACE/scripts/engine.py" "$cmd" >/dev/null )
+          done
+
+      # Регрессия: `match` не должен падать ни когда совпадений нет, ни когда
+      # есть. Код 1 = «не нашёл», это нормальный ответ, а не ошибка.
+      - name: CLI smoke — store then match round-trip
+        run: |
+          set -euo pipefail
+          vault="$(mktemp -d)"
+          mkdir -p "$vault/self" "$vault/wiki"
+          engine="$GITHUB_WORKSPACE/scripts/engine.py"
+          ( cd "$vault" && python3 "$engine" store "как чинить тесты" "запускать unittest напрямую" )
+          out="$( cd "$vault" && python3 "$engine" match "как чинить тесты" )"
+          echo "$out"
+          echo "$out" | grep -q "unittest" || { echo "::error::match не вернул сохранённый ответ"; exit 1; }
+
+      # Регрессия: vault не должен «растворяться» по подкаталогам проекта.
+      - name: CLI smoke — unconfigured vault is reported, not silently written to
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          mkdir -p "$work/myproject"
+          engine="$GITHUB_WORKSPACE/scripts/engine.py"
+          out="$( cd "$work/myproject" && python3 "$engine" status )"
+          echo "$out"
+          echo "$out" | grep -q "НЕ НАСТРОЕН" || { echo "::error::status не сообщил об отсутствии vault"; exit 1; }
+          if ( cd "$work/myproject" && python3 "$engine" store "q" "a" ); then
+            echo "::error::store записал данные без настроенного vault"; exit 1
+          fi
+          test -z "$(find "$work" -name memory.db)" || { echo "::error::создана база вне vault"; exit 1; }
+
+      # Хук не должен реагировать на «баг-трекер» и подобные нейтральные фразы.
+      - name: Hook does not fire on false positives
+        run: |
+          set -euo pipefail
+          hook="$GITHUB_WORKSPACE/hooks/observe-prompt.py"
+          for prompt in "как работает баг-трекер" "проверь ошибку в логе" "как решить задачу про привычный паттерн"; do
+            out="$(printf '{"prompt":"%s"}' "$prompt" | python3 "$hook")"
+            echo "$prompt -> $out"
+            if echo "$out" | grep -q "сигнал саморазвития"; then
+              echo "::error::ложное срабатывание хука на: $prompt"; exit 1
+            fi
+          done
+          out="$(printf '{"prompt":"я заметил что кэш тормозит"}' | python3 "$hook")"
+          echo "$out" | grep -q "сигнал саморазвития" || { echo "::error::хук пропустил настоящий сигнал"; exit 1; }

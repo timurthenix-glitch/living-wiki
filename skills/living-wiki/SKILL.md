@@ -47,6 +47,8 @@ description: Set up or maintain a personal, self-improving Obsidian-compatible k
 
 ### 4.0. Session Recorder и защита контекста
 
+**Путь к скриптам и к vault.** `engine.py` берётся из корня плагина (`${CLAUDE_PLUGIN_ROOT}/scripts/engine.py`), а не из vault пользователя: `python scripts/engine.py` верно только тогда, когда ты работаешь внутри клона этого репозитория. Корень vault определяется однозначно — `$LIVING_WIKI_VAULT` (или `~/.living-wiki-path`), иначе ближайший вверх по дереву каталог с `self/` или `wiki/`; `AGENTS.md` и `.git` признаками хранилища не считаются. Ответ `VAULT НЕ НАСТРОЕН` означает ровно это — сначала настрой структуру (`references/setup.md`), не создавай `.cache/` рядом с проектом.
+
 В начале работы запускай `python scripts/engine.py session-start`, по ходу
 фиксируй только существенные результаты через `record`, а перед ответом —
 `python scripts/engine.py session-close`. Recorder дедуплицирует события,

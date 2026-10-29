@@ -31,10 +31,18 @@ if [[ "$agents_version" != "$skill_version" ]]; then
   exit 1
 fi
 
+# Сравниваем семантические версии по компонентам, а не только по major:
+# `2.0` НЕ должно считаться >= `1.99` на основании одной первой цифры.
 ver_ge() {
-  local a_major=${1%%.*}
-  local b_major=${2%%.*}
-  (( 10#$a_major >= 10#$b_major ))
+  local IFS=.
+  local -a a=($1) b=($2)
+  local i x y
+  for i in 0 1 2 3; do
+    x=${a[i]:-0}; y=${b[i]:-0}
+    if (( 10#$x > 10#$y )); then return 0; fi
+    if (( 10#$x < 10#$y )); then return 1; fi
+  done
+  return 0
 }
 
 if ! ver_ge "$plugin_version" "$agents_version"; then

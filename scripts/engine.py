@@ -30,13 +30,29 @@ from typing import Optional, List, Dict, Tuple, Any, Set
 try:
     from storage import MemoryStorage, get_default_db_path
     from text import calculate_similarity, normalize_string
+    from vault import (
+        resolve_vault_root,
+        require_vault_root,
+        configured_vault_root,
+        default_db_path,
+        VaultNotConfigured,
+        ENV_VAULT,
+    )
 except ImportError:
     from scripts.storage import MemoryStorage, get_default_db_path
     from scripts.text import calculate_similarity, normalize_string
+    from scripts.vault import (
+        resolve_vault_root,
+        require_vault_root,
+        configured_vault_root,
+        default_db_path,
+        VaultNotConfigured,
+        ENV_VAULT,
+    )
 
 
 def get_cache_root() -> Path:
-    """Возвращает путь к директории .cache проекта."""
+    """Возвращает путь к директории .cache текущего vault (по vault.py)."""
     db_path = get_default_db_path()
     cache_dir = db_path.parent
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -299,20 +315,30 @@ class SessionRecorder:
             except Exception:
                 pass
 
+        # Разметка markdown-списка (`- **Что сделали**: …`) не должна попадать
+        # в тело урока: раньше группы захвата давали мусор вида `**: timeout=10`.
+        def _grab(label: str, value: str) -> str:
+            v = value.strip()
+            v = re.sub(r"^[\s*_`]+", "", v)   # ведущие `**`, ```, пробелы
+            v = re.sub(r"[\s*_`]+$", "", v)   # висящие `**` в конце
+            if not v or v.strip("*_` ") in {label.lower(), label}:
+                return ""
+            return v.strip()
+
         what = ""
         root_cause = ""
         gotchas = ""
 
-        m_what = re.search(r"(?:Что сделали|Решение|What was done)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
-        m_cause = re.search(r"(?:Первопричина|Причина|Физика бага|Root cause)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
-        m_gotchas = re.search(r"(?:Грабли на будущее|Грабли|Не трогать|Gotchas)[\s:]*([^\n\r]+)", text, re.IGNORECASE)
+        m_what = re.search(r"(?:Что сделали|Решение|What was done)[\s*:]*([^\n\r]+)", text, re.IGNORECASE)
+        m_cause = re.search(r"(?:Первопричина|Причина|Физика бага|Root cause)[\s*:]*([^\n\r]+)", text, re.IGNORECASE)
+        m_gotchas = re.search(r"(?:Грабли на будущее|Грабли|Не трогать|Gotchas)[\s*:]*([^\n\r]+)", text, re.IGNORECASE)
 
         if m_what:
-            what = m_what.group(1).strip()
+            what = _grab("Что сделали", m_what.group(1))
         if m_cause:
-            root_cause = m_cause.group(1).strip()
+            root_cause = _grab("Первопричина", m_cause.group(1))
         if m_gotchas:
-            gotchas = m_gotchas.group(1).strip()
+            gotchas = _grab("Грабли на будущее", m_gotchas.group(1))
 
         if not what and not root_cause:
             m_block = re.search(r"###\s+(?:Находки для Живой Вики|Living Wiki Findings|Technical Anchor)[\s\S]*?(?=\n###|\Z)", text, re.IGNORECASE)
@@ -676,35 +702,43 @@ class VaultAtlas:
     """
     @staticmethod
     def find_vault_root(start_dir: Optional[Path] = None) -> Path:
-        current = (start_dir or Path.cwd()).resolve()
-        for p in [current] + list(current.parents):
-            if (p / "AGENTS.md").exists() or (p / "self").is_dir():
-                return p
-        return current
+        return resolve_vault_root(start_dir=start_dir)[0]
 
     @staticmethod
     def configured_vault_root() -> Optional[Path]:
-        candidates = []
-        env_path = os.environ.get("LIVING_WIKI_VAULT")
-        if env_path:
-            candidates.append(Path(env_path).expanduser())
-        candidates.extend([
-            Path.home() / ".living-wiki-path",
-            Path.home() / ".living-wiki" / "vault-path",
-        ])
-        for candidate in candidates:
-            if candidate.is_file():
-                try:
-                    candidate = Path(candidate.read_text(encoding="utf-8").strip()).expanduser()
-                except OSError as exc:
-                    raise RuntimeError(f"Не удалось прочитать путь центрального vault: {exc}") from exc
-            if candidate.is_dir():
-                return candidate.resolve()
-        return None
+        return configured_vault_root()
 
     @classmethod
     def get_status(cls, start_dir: Optional[Path] = None) -> Dict[str, Any]:
-        vault_root = cls.find_vault_root(start_dir)
+        vault_root, found = resolve_vault_root(start_dir=start_dir)
+        if not found:
+            # Не изображаем «пустое хранилище»: пользователь должен увидеть,
+            # что vault не настроен, иначе он будет отлаживать несуществующие данные.
+            report = (
+                "==================================================\n"
+                "[VAULT ATLAS] Статус хранилища Живой Вики (LOD 0)\n"
+                f"Путь: {vault_root}\n"
+                "--------------------------------------------------\n"
+                "*** VAULT НЕ НАСТРОЕН ***\n"
+                "Каталог с self/ или wiki/ не найден ни здесь, ни выше по дереву.\n"
+                f"Настройте хранилище (references/setup.md) или задайте ${ENV_VAULT}.\n"
+                "Это не пустое хранилище — записи сюда не попадут.\n"
+                "=================================================="
+            )
+            return {
+                "report": report,
+                "vault_root": str(vault_root),
+                "found": False,
+                "topics": [],
+                "total_wiki_notes": 0,
+                "active_goals": [],
+                "latest_lesson": "Нет данных",
+                "lessons_count": 0,
+                "latest_journal": None,
+                "journal_count": 0,
+                "anomalies": ["vault не настроен"],
+                "memory_stats": {"total_entries": 0, "total_hits": 0},
+            }
 
         # 1. Wiki stats
         wiki_dir = vault_root / "wiki"
@@ -843,6 +877,7 @@ class VaultAtlas:
         return {
             "report": report,
             "vault_root": str(vault_root),
+            "found": True,
             "topics": topics,
             "total_wiki_notes": total_wiki_notes,
             "active_goals": active_goals,
@@ -1506,8 +1541,7 @@ def main():
 
     # --- match ---
     elif args.command == "match":
-        db_path = os.environ.get("LIVING_WIKI_MEMORY_DB")
-        storage = MemoryStorage(Path(db_path) if db_path else recorder.root / ".cache" / "memory.db")
+        storage = MemoryStorage()
         match_res = storage.find_match(args.query, threshold=args.threshold)
         if match_res:
             rec = match_res[0]
@@ -1538,7 +1572,7 @@ def main():
     # --- sync ---
     elif args.command == "sync":
         storage = MemoryStorage()
-        root_dir = get_cache_root().parent
+        root_dir = require_vault_root(getattr(args, "root", None))
         count = storage.sync_from_markdown(root_dir)
         mark_lessons_synced()
         print(f"[SYNC] Импортировано уроков из markdown: {count}")
@@ -1616,4 +1650,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except VaultNotConfigured as exc:
+        # Storage-команды вызывают resolve через MemoryStorage; без этого
+        # обработчика они падали бы голым traceback и с ненулевым кодом без
+        # объяснения, что именно настроить.
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(2)

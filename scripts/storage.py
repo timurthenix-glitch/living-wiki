@@ -29,8 +29,10 @@ if hasattr(sys.stderr, "reconfigure"):
 # Импортируем алгоритм схожести из того же каталога
 try:
     from text import calculate_similarity, normalize_string, extract_words, CONVERSATIONAL_STOP_WORDS
+    from vault import resolve_vault_root, default_db_path, VaultNotConfigured
 except ImportError:
     from scripts.text import calculate_similarity, normalize_string, extract_words, CONVERSATIONAL_STOP_WORDS
+    from scripts.vault import resolve_vault_root, default_db_path, VaultNotConfigured
 
 
 from contextlib import contextmanager
@@ -43,19 +45,19 @@ def get_default_db_path() -> Path:
     """
     Определяет путь к базе SQLite (через LIVING_WIKI_MEMORY_DB или .cache/memory.db).
     Чистый геттер: директорию создаёт вызывающий (MemoryStorage.__init__).
+
+    Определение корня делегировано в vault.py — единому источнику правды,
+    который использует и engine.py. Раньше здесь была отдельная эвристика
+    (`AGENTS.md`/`.git`), расходившаяся с engine.py.
     """
     env_path = os.environ.get("LIVING_WIKI_MEMORY_DB")
     if env_path:
         return Path(env_path)
 
-    # Ищем корень репозитория/проекта (где лежит AGENTS.md или .git)
-    current = Path.cwd().resolve()
-    for parent in [current] + list(current.parents):
-        if (parent / "AGENTS.md").exists() or (parent / ".git").exists():
-            return parent / ".cache" / "memory.db"
-
-    # Fallback: текущая папка
-    return current / ".cache" / "memory.db"
+    root, found = resolve_vault_root()
+    if not found:
+        raise VaultNotConfigured(root)
+    return default_db_path(root)
 
 
 class MemoryStorage:
@@ -455,4 +457,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except VaultNotConfigured as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(2)

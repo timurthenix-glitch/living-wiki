@@ -7,6 +7,21 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# GitHub Actions даёт python3, но на Windows-машинах разработчиков обычно
+# есть только `python` (а `python3` может отсутствовать или быть заглушкой
+# Microsoft Store). Выбираем первый реально работающий интерпретатор.
+PY=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import sys" >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
+if [[ -z "$PY" ]]; then
+  echo "::error::No working Python interpreter found (tried python3, python)." >&2
+  exit 1
+fi
+
 files=(
   ".claude-plugin/plugin.json"
   ".claude-plugin/marketplace.json"
@@ -16,7 +31,7 @@ files=(
 fail=0
 for f in "${files[@]}"; do
   [[ -f "$f" ]] || continue
-  if ! python3 -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" "$f"; then
+  if ! "$PY" -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" "$f"; then
     echo "::error::$f is not valid JSON" >&2
     fail=1
   else
