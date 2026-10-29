@@ -33,13 +33,15 @@ if [[ "$(normalize "$agents_raw")" != "$(normalize "$skill_raw")" ]]; then
   exit 1
 fi
 
+# Версии сравниваются через `sort -V`, а не арифметикой shell: на старых
+# сборках Git Bash/MSYS `test -lt` и `(( ))` дают неверный порядок для 1.2/1.10.
+# Семантика semver: 1.10 > 1.2, 2.0 > 1.99, 1.1.1 >= 1.
 ver_ge() {
-  local a_major=${1%%.*} a_minor=${1#*.} b_major=${2%%.*} b_minor=${2#*.}
-  if (( 10#$a_major != 10#$b_major )); then
-    (( 10#$a_major > 10#$b_major ))
-  else
-    (( 10#$a_minor >= 10#$b_minor ))
-  fi
+  local a="$1" b="$2" top
+  [[ "$a" == *.* ]] || a="${a}.0"
+  [[ "$b" == *.* ]] || b="${b}.0"
+  top=$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n1)
+  [[ "$top" == "$a" ]]
 }
 
 if ! ver_ge "$plugin_version" "$(normalize "$agents_raw")"; then

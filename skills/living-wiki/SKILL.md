@@ -5,7 +5,7 @@ description: Use when the user asks to set up or maintain an agent memory — pe
 
 # Живая память: MEMORY.md + skills (skill v1)
 
-Один вход — `AGENTS.md`, одно хранилище — `MEMORY.md`, один тип процедур — `skills/<имя>/SKILL.md`. Никакого Obsidian, графа, `[[ссылок]]`, `wiki/`, `journal/`, `raw/`. Версия одна — v1, окончательная.
+Один вход — `AGENTS.md`, одно хранилище — `MEMORY.md`, один тип процедур — `skills/<имя>/SKILL.md`. Никакого графа и папок «на вырост». Версия одна — v1, окончательная.
 
 Установка: если `MEMORY.md` нет, создай его с пустым скелетом (раздел 2 в `AGENTS.md`) и работай дальше. Если есть — сверь `rules_hash` в frontmatter `AGENTS.md`: не совпал, замени файл правил; `MEMORY.md` и `skills/` не трогай.
 

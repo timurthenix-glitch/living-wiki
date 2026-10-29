@@ -1,26 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "living-wiki",
-  "description": "Живая вики: Obsidian-совместимая база знаний и контур саморазвития на markdown",
+  "description": "Живая память агента: один MEMORY.md с короткими фактами и skills/ с повторяемыми процедурами, markdown-only",
   "owner": {
     "name": "timurthenix-glitch"
   },
   "plugins": [
     {
       "name": "living-wiki",
-      "displayName": "Living Wiki (v1.1.1, rules v1 — last build 2026-10-27)",
-      "description": "Живая память агента без Obsidian: один MEMORY.md с короткими фактами (лимит 6000 символов, дубликаты и противоречия схлопываются) плюс skills/<имя>/SKILL.md для повторяемых процедур. Агент пишет память сам в том же ответе, где факт выяснился, — пользователь не говорит «запиши» и не подводит итог. Один файл правил AGENTS.md, одна версия v1, свежесть копии по rules_hash.",
+      "displayName": "Living Wiki",
+      "description": "Живая память агента: один MEMORY.md с короткими фактами (лимит 6000 символов, дубликаты и противоречия схлопываются) плюс skills/<имя>/SKILL.md для повторяемых процедур. Агент пишет память сам в том же ответе, где факт выяснился, — пользователь не говорит «запиши» и не подводит итог. Один файл правил AGENTS.md, свежесть копии по rules_hash.",
       "source": "."
-    },
-    {
-      "name": "living-wiki-legacy-v0.1",
-      "displayName": "Living Wiki (legacy, Obsidian vault)",
-      "description": "Старая схема — Obsidian-вики на страницах: wiki/, self/, journal/, raw/, attachments/, [[wikilinks]] и правило 2–3 связей. Для тех, кто уже ведёт такой vault и не хочет переезжать на MEMORY.md. Зафиксировано на теге living-wiki--v0.2.0; в актуальной ветке этой схемы больше нет.",
-      "source": {
-        "source": "github",
-        "repo": "timurthenix-glitch/living-wiki",
-        "ref": "living-wiki--v0.2.0"
-      }
     }
   ]
 }

@@ -19,3 +19,53 @@ jobs:
         run: bash scripts/rules-hash.sh --check
       - name: JSON manifests parse
         run: bash scripts/check-json-valid.sh
+
+      # Регрессия: ver_ge сравнивал версии по строке, поэтому `1.2 >= 1.10` давал
+      # FALSE, а `1.1.1` против `1` ронял арифметику на точке. Проверяем семантику
+      # semver на крайних случаях, а не только на текущих значениях пакета.
+      - name: Version comparison follows semver ordering
+        run: |
+          set -euo pipefail
+          eval "$(sed -n '/^ver_ge() {/,/^}/p' scripts/check-version-sync.sh)"
+          check() {
+            if ver_ge "$1" "$2"; then got=TRUE; else got=FALSE; fi
+            if [ "$got" != "$3" ]; then
+              echo "::error::ver_ge $1 $2 = $got, ожидалось $3"; exit 1
+            fi
+            echo "  ok: $1 >= $2 -> $got"
+          }
+          check 2.0   1.99 TRUE
+          check 1.99  2.0  FALSE
+          check 1.1.1 1    TRUE
+          check 1.10  1.2  TRUE
+          check 1.2   1.10 FALSE
+          check 1     1.1  FALSE
+          check 1.1   1.1  TRUE
+          check 10.0  9.9  TRUE
+
+      # MEMORY.md — горячий слой с жёстким потолком 6000 символов (AGENTS.md §3).
+      # Сторожим бюджет и наличие обязательных разделов в шаблоне.
+      - name: MEMORY.md template is within the 6000-char budget
+        run: |
+          set -euo pipefail
+          chars=$(wc -m < templates/MEMORY.md)
+          echo "templates/MEMORY.md: $chars символов (лимит 6000)"
+          if [ "$chars" -gt 6000 ]; then
+            echo "::error::шаблон MEMORY.md превышает лимит 6000 символов"; exit 1
+          fi
+          for section in "О пользователе" "Проект и стек" "Решения" "Грабли" "Открытые вопросы"; do
+            grep -qF "## $section" templates/MEMORY.md || {
+              echo "::error::в шаблоне MEMORY.md нет раздела «$section»"; exit 1
+            }
+          done
+
+      # AGENTS.md читается в КАЖДОЙ сессии — его раздувание прямо бьёт по
+      # контекстному окну. Сторожим бюджет, чтобы файл снова не вырос до 63 КБ.
+      - name: AGENTS.md stays within the context budget
+        run: |
+          set -euo pipefail
+          chars=$(wc -m < AGENTS.md)
+          echo "AGENTS.md: $chars символов (~$((chars / 3)) токенов)"
+          if [ "$chars" -gt 20000 ]; then
+            echo "::error::AGENTS.md раздулся сверх бюджета 20000 символов — вынеси детали из правил"; exit 1
+          fi

@@ -1,6 +1,6 @@
 # Living Wiki — живая память агента: MEMORY.md + скилы
 
-Один файл памяти и папка скилов, которые агент ведёт сам. Без Obsidian, без графа, без базы данных и API-ключей — обычный markdown, который читает любой агент.
+Один файл памяти и папка скилов, которые агент ведёт сам — обычный markdown, который читает любой агент. Без базы данных и API-ключей.
 
 > **In English:** a Claude Code plugin (also usable standalone with any file-reading agent) that gives an agent durable project memory — a single `MEMORY.md` of short declarative facts plus `skills/<name>/SKILL.md` for repeatable procedures, both written by the agent as the work happens. The rules and the resulting memory are in Russian; the `description` field above, which Claude Code matches on, is English.
 
@@ -13,7 +13,7 @@ memory/<тема>.md       — холодный слой: детали по те
 skills/<имя>/SKILL.md  — повторяемые процедуры
 ```
 
-Два файла на старте. Ни `wiki/`, ни `journal/`, ни `raw/`, ни `attachments/`, ни дат в именах.
+Два файла на старте. Никаких папок «на вырост» и дат в именах.
 
 ## Как это работает
 
@@ -40,10 +40,6 @@ skills/<имя>/SKILL.md  — повторяемые процедуры
 ### Совсем без репозитория
 
 Скопируй содержимое `AGENTS.md` в чат со словами «настрой память по этим правилам».
-
-## Что изменилось
-
-До v1.1 проект строился вокруг Obsidian-вики: страницы `wiki/`, дневник `self/`, `journal/`, `raw/` и `[[wikilinks]]`. На практике это давало десятки файлов на старте и заставляло агента добивать граф ссылками. Теперь всё проще: один `MEMORY.md`, папка `skills/` и один файл правил. Старая схема осталась в истории — она доступна как плагин `living-wiki-legacy-v0.1` (тег `living-wiki--v0.2.0`).
 
 ## Версия
 
