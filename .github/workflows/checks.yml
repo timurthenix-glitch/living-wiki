@@ -11,79 +11,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Rule-pointer files are in sync with templates/rule-pointer.md
         run: bash scripts/check-rule-pointers.sh
-
       - name: plugin.json / AGENTS.md / SKILL.md versions are in sync
         run: bash scripts/check-version-sync.sh
-
+      - name: rules_hash matches the instruction layer
+        run: bash scripts/rules-hash.sh --check
       - name: JSON manifests parse
         run: bash scripts/check-json-valid.sh
 
-      # Bug-регрессия: `engine.py match` падал с UnboundLocalError в любом
-      # каталоге, и ни один существовавший тест этого не ловил, потому что
-      # все они импортировали классы, а не вызывали main().
-      - name: Python test suites (classes + CLI entry point)
+      # Регрессия: ver_ge сравнивал версии по строке, поэтому `1.2 >= 1.10` давал
+      # FALSE, а `1.1.1` против `1` ронял арифметику на точке. Проверяем семантику
+      # semver на крайних случаях, а не только на текущих значениях пакета.
+      - name: Version comparison follows semver ordering
         run: |
           set -euo pipefail
-          cd scripts
-          for suite in test_engine.py test_memory.py test_cli.py; do
-            echo "::group::$suite"
-            python3 "$suite"
-            echo "::endgroup::"
-          done
-
-      - name: CLI smoke — every read-only subcommand exits cleanly
-        run: |
-          set -euo pipefail
-          vault="$(mktemp -d)"
-          mkdir -p "$vault/self" "$vault/wiki/demo"
-          printf -- '---\ntitle: Уроки\n---\n\n## Урок\nПроверенный урок.\n' > "$vault/self/Lessons-Learned.md"
-          for cmd in status audit subjects sync digest-today clean; do
-            echo "--- engine.py $cmd"
-            ( cd "$vault" && python3 "$GITHUB_WORKSPACE/scripts/engine.py" "$cmd" >/dev/null )
-          done
-
-      # Регрессия: `match` не должен падать ни когда совпадений нет, ни когда
-      # есть. Код 1 = «не нашёл», это нормальный ответ, а не ошибка.
-      - name: CLI smoke — store then match round-trip
-        run: |
-          set -euo pipefail
-          vault="$(mktemp -d)"
-          mkdir -p "$vault/self" "$vault/wiki"
-          engine="$GITHUB_WORKSPACE/scripts/engine.py"
-          ( cd "$vault" && python3 "$engine" store "как чинить тесты" "запускать unittest напрямую" )
-          out="$( cd "$vault" && python3 "$engine" match "как чинить тесты" )"
-          echo "$out"
-          echo "$out" | grep -q "unittest" || { echo "::error::match не вернул сохранённый ответ"; exit 1; }
-
-      # Регрессия: vault не должен «растворяться» по подкаталогам проекта.
-      - name: CLI smoke — unconfigured vault is reported, not silently written to
-        run: |
-          set -euo pipefail
-          work="$(mktemp -d)"
-          mkdir -p "$work/myproject"
-          engine="$GITHUB_WORKSPACE/scripts/engine.py"
-          out="$( cd "$work/myproject" && python3 "$engine" status )"
-          echo "$out"
-          echo "$out" | grep -q "НЕ НАСТРОЕН" || { echo "::error::status не сообщил об отсутствии vault"; exit 1; }
-          if ( cd "$work/myproject" && python3 "$engine" store "q" "a" ); then
-            echo "::error::store записал данные без настроенного vault"; exit 1
-          fi
-          test -z "$(find "$work" -name memory.db)" || { echo "::error::создана база вне vault"; exit 1; }
-
-      # Хук не должен реагировать на «баг-трекер» и подобные нейтральные фразы.
-      - name: Hook does not fire on false positives
-        run: |
-          set -euo pipefail
-          hook="$GITHUB_WORKSPACE/hooks/observe-prompt.py"
-          for prompt in "как работает баг-трекер" "проверь ошибку в логе" "как решить задачу про привычный паттерн"; do
-            out="$(printf '{"prompt":"%s"}' "$prompt" | python3 "$hook")"
-            echo "$prompt -> $out"
-            if echo "$out" | grep -q "сигнал саморазвития"; then
-              echo "::error::ложное срабатывание хука на: $prompt"; exit 1
+          eval "$(sed -n '/^ver_ge() {/,/^}/p' scripts/check-version-sync.sh)"
+          check() {
+            if ver_ge "$1" "$2"; then got=TRUE; else got=FALSE; fi
+            if [ "$got" != "$3" ]; then
+              echo "::error::ver_ge $1 $2 = $got, ожидалось $3"; exit 1
             fi
+            echo "  ok: $1 >= $2 -> $got"
+          }
+          check 2.0   1.99 TRUE
+          check 1.99  2.0  FALSE
+          check 1.1.1 1    TRUE
+          check 1.10  1.2  TRUE
+          check 1.2   1.10 FALSE
+          check 1     1.1  FALSE
+          check 1.1   1.1  TRUE
+          check 10.0  9.9  TRUE
+
+      # MEMORY.md — горячий слой с жёстким потолком 6000 символов (AGENTS.md §3).
+      # Сторожим бюджет и наличие обязательных разделов в шаблоне.
+      - name: MEMORY.md template is within the 6000-char budget
+        run: |
+          set -euo pipefail
+          chars=$(wc -m < templates/MEMORY.md)
+          echo "templates/MEMORY.md: $chars символов (лимит 6000)"
+          if [ "$chars" -gt 6000 ]; then
+            echo "::error::шаблон MEMORY.md превышает лимит 6000 символов"; exit 1
+          fi
+          for section in "О пользователе" "Проект и стек" "Решения" "Грабли" "Открытые вопросы"; do
+            grep -qF "## $section" templates/MEMORY.md || {
+              echo "::error::в шаблоне MEMORY.md нет раздела «$section»"; exit 1
+            }
           done
-          out="$(printf '{"prompt":"я заметил что кэш тормозит"}' | python3 "$hook")"
-          echo "$out" | grep -q "сигнал саморазвития" || { echo "::error::хук пропустил настоящий сигнал"; exit 1; }
+
+      # AGENTS.md читается в КАЖДОЙ сессии — его раздувание прямо бьёт по
+      # контекстному окну. Сторожим бюджет, чтобы файл снова не вырос до 63 КБ.
+      - name: AGENTS.md stays within the context budget
+        run: |
+          set -euo pipefail
+          chars=$(wc -m < AGENTS.md)
+          echo "AGENTS.md: $chars символов (~$((chars / 3)) токенов)"
+          if [ "$chars" -gt 20000 ]; then
+            echo "::error::AGENTS.md раздулся сверх бюджета 20000 символов — вынеси детали из правил"; exit 1
+          fi
