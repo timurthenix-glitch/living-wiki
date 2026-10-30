@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# С v1 версия — константа: единая версия, без подверсий и минорных номеров.
+# С v1/v2 версия — константа схемы: единая версия, без подверсий и минорных номеров.
 # Свежесть развёрнутой копии определяется rules_hash (scripts/rules-hash.sh),
 # а не цифрой. Здесь проверяются только согласованность маркера и semver пакета:
 #  1. AGENTS.md bootstrap_version и inline «skill vN» в SKILL.md — одно и то же
-#     число в двух форматах, обязаны совпадать.
+#     число в двух форматах, обязаны совпадать (если SKILL.md присутствует).
 #  2. plugin.json (major.minor) >= версии схемы: Claude Code предлагает
 #     обновление только когда растёт version в plugin.json.
 set -euo pipefail
@@ -11,14 +11,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 plugin_version=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+' .claude-plugin/plugin.json | grep -oE '[0-9]+\.[0-9]+$')
 agents_raw=$(grep -oE '^bootstrap_version:[[:space:]]*v?[0-9]+(\.[0-9]+)?' AGENTS.md | grep -oE '[0-9]+(\.[0-9]+)?$')
-skill_raw=$(grep -oE '\(skill v[0-9]+(\.[0-9]+)?\)' skills/living-wiki/SKILL.md | grep -oE '[0-9]+(\.[0-9]+)?')
 
 echo "plugin.json version (major.minor): $plugin_version"
 echo "AGENTS.md bootstrap_version:        ${agents_raw:-<none>}"
-echo "SKILL.md skill version:             ${skill_raw:-<none>}"
 
-if [[ -z "$plugin_version" || -z "$agents_raw" || -z "$skill_raw" ]]; then
-  echo "::error::Could not extract one of the version fields — check the source files haven't changed format." >&2
+if [[ -z "$plugin_version" || -z "$agents_raw" ]]; then
+  echo "::error::Could not extract version fields — check plugin.json or AGENTS.md format." >&2
   exit 1
 fi
 
@@ -28,9 +26,13 @@ normalize() {
   printf '%s' "$v"
 }
 
-if [[ "$(normalize "$agents_raw")" != "$(normalize "$skill_raw")" ]]; then
-  echo "::error::AGENTS.md bootstrap_version ($agents_raw) and SKILL.md (skill v$skill_raw) must match exactly — they are the same marker." >&2
-  exit 1
+if [[ -f "skills/living-wiki/SKILL.md" ]]; then
+  skill_raw=$(grep -oE '\(skill v[0-9]+(\.[0-9]+)?\)' skills/living-wiki/SKILL.md | grep -oE '[0-9]+(\.[0-9]+)?' || true)
+  echo "SKILL.md skill version:             ${skill_raw:-<none>}"
+  if [[ -n "$skill_raw" && "$(normalize "$agents_raw")" != "$(normalize "$skill_raw")" ]]; then
+    echo "::error::AGENTS.md bootstrap_version ($agents_raw) and SKILL.md (skill v$skill_raw) must match exactly — they are the same marker." >&2
+    exit 1
+  fi
 fi
 
 ver_ge() {
@@ -47,4 +49,4 @@ if ! ver_ge "$plugin_version" "$(normalize "$agents_raw")"; then
   exit 1
 fi
 
-echo "OK: plugin.json ($plugin_version) >= rules marker ($agents_raw); AGENTS.md/SKILL.md agree ($agents_raw)"
+echo "OK: plugin.json ($plugin_version) >= rules marker ($agents_raw)"

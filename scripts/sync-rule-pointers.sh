@@ -9,7 +9,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 SOURCE="templates/rule-pointer.md"
 TARGETS=(
   ".agents/rules/living-wiki.md"
-  ".clinerules/living-wiki.md"
+  ".clinerules"
   ".cursor/rules/living-wiki.md"
   ".github/copilot-instructions.md"
   ".junie/guidelines.md"
@@ -18,8 +18,17 @@ TARGETS=(
   ".windsurf/rules/living-wiki.md"
 )
 
+# Clean up invalid legacy directory if present
+if [[ -d ".clinerules" ]]; then
+  echo "Removing legacy .clinerules directory..."
+  rm -rf ".clinerules"
+fi
+
 for t in "${TARGETS[@]}"; do
-  mkdir -p "$(dirname "$t")"
+  dir="$(dirname "$t")"
+  if [[ "$dir" != "." ]]; then
+    mkdir -p "$dir"
+  fi
   cp "$SOURCE" "$t"
   echo "synced $t"
 done

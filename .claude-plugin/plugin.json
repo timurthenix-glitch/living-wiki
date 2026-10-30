@@ -1,8 +1,8 @@
 {
   "name": "living-wiki",
-  "displayName": "Living Wiki (v1.1.1, rules v1 — last build 2026-10-27)",
+  "displayName": "Living Wiki (v2.0.0, rules v2 — last build 2026-10-30)",
   "description": "Живая память агента: MEMORY.md с фактами и skills/ с процедурами, которые агент ведёт сам — markdown-only, без Obsidian и без базы данных",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "author": {
     "name": "timurthenix-glitch"
   },

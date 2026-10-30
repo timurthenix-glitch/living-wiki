@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
-# rules_hash — отпечаток слоя инструкций (AGENTS.md + skills/living-wiki/**),
+# rules_hash — отпечаток слоя инструкций (AGENTS.md),
 # который заменяет номер версии: с v1 версия не меняется никогда, а устарела ли
 # копия в проекте — видно по этому хэшу.
 #
 #   scripts/rules-hash.sh          — напечатать актуальный хэш
 #   scripts/rules-hash.sh --check  — сверить его с frontmatter AGENTS.md (CI)
 #
-# Хэш считается по содержимому без строки rules_hash (иначе поле ссылалось бы
+# Хэш считается по содержимому AGENTS.md без строки rules_hash (иначе поле ссылалось бы
 # на само себя) и с нормализацией CRLF → LF, чтобы checkout на Windows и на
 # Linux давал одно и то же значение.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 hash_rules() {
-  {
-    grep -v '^rules_hash:' AGENTS.md | tr -d '\r'
-    find skills/living-wiki -type f -name '*.md' | LC_ALL=C sort | while IFS= read -r f; do
-      printf '=== %s\n' "$f"
-      tr -d '\r' < "$f"
-    done
-  } | sha256sum | cut -d' ' -f1
+  grep -v '^rules_hash:' AGENTS.md | tr -d '\r' | sha256sum | cut -d' ' -f1
 }
 
 computed=$(hash_rules)
@@ -35,6 +29,10 @@ if [[ "${1:-}" == "--check" ]]; then
     exit 1
   fi
   echo "OK: rules_hash $computed соответствует содержимому"
+elif [[ "${1:-}" == "--update" ]]; then
+  sed -i.bak -E "s/^rules_hash:[[:space:]]*[0-9a-f]+/rules_hash: $computed/" AGENTS.md
+  rm -f AGENTS.md.bak
+  echo "Updated rules_hash in AGENTS.md to $computed"
 else
   echo "$computed"
 fi
