@@ -435,12 +435,12 @@ def parse_python_ast(
 
     try:
         tree = ast.parse(source_code)
-    except SyntaxError as e:
+    except (SyntaxError, ValueError) as e:
         # Gracefully handle syntax errors by recording an ERROR entity
         err_ent = graph.add_entity(
             name=f"{module_name}::SyntaxError",
             entity_type=EntityType.ERROR,
-            attributes={"error": str(e), "lineno": e.lineno or 0},
+            attributes={"error": str(e), "lineno": getattr(e, "lineno", 0) or 0},
         )
         mod_ent = graph.add_entity(name=module_name, entity_type=EntityType.ARTIFACT)
         graph.add_hyperedge(

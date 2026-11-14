@@ -321,5 +321,204 @@ class TestContextAndAudit(unittest.TestCase):
         self.assertTrue(should_audit("refactor"))
 
 
+class TestALMFEngineIntegration(unittest.TestCase):
+    """Verifies Milestone 1: ALMF Engine Integration & Dual-Mode CLI Operations."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.td = Path(self.temp_dir)
+        self.sample_memory_content = (
+            "# Память\n\n"
+            "## О пользователе\n"
+            "- Пользователь предпочитает лаконичные ответы.\n\n"
+            "## Проект и стек\n"
+            "- Python 3.12, SQLite\n"
+            "- port: 8080\n\n"
+            "## Решения\n"
+            "- Архитектура и слои — memory/architecture.md\n"
+            "- Принято решение использовать ALMF как нативный движок сжатия.\n\n"
+            "## Грабли\n"
+            "- Осторожно с нуль-байтами в строках исходного кода ast.parse.\n\n"
+            "## Открытые вопросы\n"
+            "- Оптимальный бюджет токенов для мобильных агентов.\n"
+        )
+        self.sample_topic_content = (
+            "# Архитектура\n\n"
+            "- Сервисный слой полностью изолирован от базы данных.\n"
+            "- Доступ через интерфейсные шлюзы.\n"
+        )
+
+        self.mem_file = self.td / "MEMORY.md"
+        self.mem_file.write_text(self.sample_memory_content, encoding="utf-8")
+
+        self.topic_dir = self.td / "memory"
+        self.topic_dir.mkdir(parents=True, exist_ok=True)
+        self.topic_file = self.topic_dir / "architecture.md"
+        self.topic_file.write_text(self.sample_topic_content, encoding="utf-8")
+
+        self.almf_file = self.td / "memory.almf"
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_almf_pack_and_stats(self):
+        """Verifies packaging Markdown structure into .almf container and checking stats."""
+        class PackArgs:
+            input = str(self.mem_file)
+            output = str(self.almf_file)
+            mode = "auto"
+
+        res = cli.cmd_pack(PackArgs())
+        self.assertEqual(res, 0)
+        self.assertTrue(self.almf_file.is_file())
+
+        # Verify binary header
+        with open(self.almf_file, "rb") as f:
+            header_bytes = f.read(4)
+            self.assertEqual(header_bytes, b"ALMF")
+
+        # Verify stats command
+        class StatsArgs:
+            input = str(self.almf_file)
+
+        res_stats = cli.cmd_stats(StatsArgs())
+        self.assertEqual(res_stats, 0)
+
+    def test_almf_query_token_budget(self):
+        """Verifies querying facts within strict token budgets."""
+        class PackArgs:
+            input = str(self.mem_file)
+            output = str(self.almf_file)
+            mode = "auto"
+
+        cli.cmd_pack(PackArgs())
+
+        class QueryArgs:
+            input = str(self.almf_file)
+            query = "архитектура"
+            budget = 300
+            tokenizer = "o200k_base"
+
+        res = cli.cmd_query(QueryArgs())
+        self.assertEqual(res, 0)
+
+    def test_almf_unpack_canonical_5_sections_reconstruction(self):
+        """Verifies unpacking .almf accurately reconstructs the 5 canonical sections of Living Wiki."""
+        class PackArgs:
+            input = str(self.mem_file)
+            output = str(self.almf_file)
+            mode = "auto"
+
+        cli.cmd_pack(PackArgs())
+
+        unpack_dir = self.td / "unpacked"
+        class UnpackArgs:
+            input = str(self.almf_file)
+            output_dir = str(unpack_dir)
+            reconstruct_sections = True
+
+        res = cli.cmd_unpack(UnpackArgs())
+        self.assertEqual(res, 0)
+
+        unpacked_mem = unpack_dir / "MEMORY.md"
+        self.assertTrue(unpacked_mem.is_file())
+        mem_text = unpacked_mem.read_text(encoding="utf-8")
+
+        # Canonical section headers must all be present
+        canonical_headers = [
+            "## О пользователе",
+            "## Проект и стек",
+            "## Решения",
+            "## Грабли",
+            "## Открытые вопросы",
+        ]
+        for header in canonical_headers:
+            self.assertIn(header, mem_text)
+
+        # Facts must be placed under their sections
+        self.assertIn("Пользователь предпочитает лаконичные ответы.", mem_text)
+        self.assertIn("Python 3.12, SQLite", mem_text)
+        self.assertIn("Архитектура и слои — memory/architecture.md", mem_text)
+        self.assertIn("ast.parse", mem_text)
+        self.assertIn("бюджет токенов", mem_text)
+
+        # Topic files must also be reconstructed
+        reconstructed_topic = unpack_dir / "memory" / "architecture.md"
+        self.assertTrue(reconstructed_topic.is_file())
+        topic_text = reconstructed_topic.read_text(encoding="utf-8")
+        self.assertIn("Сервисный слой", topic_text)
+
+        # Structural artifacts
+        self.assertTrue((unpack_dir / "entities.json").is_file())
+        self.assertTrue((unpack_dir / "hyperedges.json").is_file())
+        self.assertTrue((unpack_dir / "episodic_nodes.json").is_file())
+
+    def test_almf_migrate_bidirectional_and_force(self):
+        """Verifies non-destructive migration between Markdown and ALMF with --force protections."""
+        mig_almf = self.td / "migrated.almf"
+        class MigToAlmfArgs:
+            to_almf = True
+            to_md = False
+            input = str(self.mem_file)
+            output = str(mig_almf)
+            force = False
+
+        res = cli.cmd_migrate(MigToAlmfArgs())
+        self.assertEqual(res, 0)
+        self.assertTrue(mig_almf.is_file())
+        # Original Markdown must be preserved (non-destructive)
+        self.assertTrue(self.mem_file.is_file())
+
+        # Second attempt without force must fail
+        res_fail = cli.cmd_migrate(MigToAlmfArgs())
+        self.assertEqual(res_fail, 1)
+
+        # Second attempt with force must succeed
+        MigToAlmfArgs.force = True
+        res_force = cli.cmd_migrate(MigToAlmfArgs())
+        self.assertEqual(res_force, 0)
+
+        # Migrate back to Markdown
+        mig_md_dir = self.td / "migrated_md"
+        class MigToMdArgs:
+            to_almf = False
+            to_md = True
+            input = str(mig_almf)
+            output = str(mig_md_dir)
+            force = False
+
+        res_md = cli.cmd_migrate(MigToMdArgs())
+        self.assertEqual(res_md, 0)
+        self.assertTrue((mig_md_dir / "MEMORY.md").is_file())
+        self.assertTrue(mig_almf.is_file())  # ALMF container remains intact
+
+        # Second attempt without force must fail
+        res_md_fail = cli.cmd_migrate(MigToMdArgs())
+        self.assertEqual(res_md_fail, 1)
+
+        # With force must succeed
+        MigToMdArgs.force = True
+        res_md_force = cli.cmd_migrate(MigToMdArgs())
+        self.assertEqual(res_md_force, 0)
+
+    def test_dual_mode_coexistence(self):
+        """Verifies that Markdown operations (check-size, lock, journal) operate alongside ALMF without conflict."""
+        class SizeArgs:
+            file = str(self.mem_file)
+            profile = "compact"
+
+        self.assertEqual(cli.cmd_check_size(SizeArgs()), 0)
+
+        class PackArgs:
+            input = str(self.mem_file)
+            output = str(self.almf_file)
+            mode = "auto"
+
+        self.assertEqual(cli.cmd_pack(PackArgs()), 0)
+        self.assertTrue(self.mem_file.is_file())
+        self.assertTrue(self.almf_file.is_file())
+        self.assertEqual(cli.cmd_check_size(SizeArgs()), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 ---
 name: living-wiki
 description: Use when the user asks to set up or maintain an agent memory — persistent project memory plus reusable skill files in plain markdown (MEMORY.md with short declarative facts, skills/<name>/SKILL.md for repeatable procedures), with the agent writing them itself as the work happens. Use for a personal wiki, second brain, living memory, self-improving agent memory, or "remember this across sessions" in this project or a new one. Does NOT produce documentation for a codebase or a team wiki.
-rules_hash: ea9e5c888df0e21856f9a9da464c5bd3641f01a8213cdf10438058b08bdf4541
+rules_hash: 99a4b97901da736a9acbfe276ec195cb8376a35818341a858902e92937445114
 ---
 
 # Живая память: MEMORY.md + skills (skill v2)
@@ -57,6 +57,22 @@ rules_hash: ea9e5c888df0e21856f9a9da464c5bd3641f01a8213cdf10438058b08bdf4541
 4. Старая запись устарела? → замени или удали.
 
 **Гейт аудита**: на тривиальные вопросы, краткие реплики, уточнения и промежуточные шаги аудит не запускается. Ничего нового нет — не пиши ничего. Выдумывать записи ради активности запрещено.
+
+## Двухрежимная работа и движок сжатия ALMF
+
+В дополнение к стандартному текстовому слою Markdown (`MEMORY.md` и `memory/*.md`) проект включает нативный движок ультраплотного сжатия памяти **ALMF** (Adaptive Long-term Memory Format).
+
+### Возможности ALMF
+- **Бинарный контейнер `memory.almf`**: 6 функциональных секций (интернирование строк, реестр сущностей, гиперграф пропозиций, эпизодическое дерево, семантический индекс SimHash-64, хранилище блобов Vault) с контрольной суммой CRC32 и сжатием Brotli/Deflate.
+- **Сверхплотное сжатие (CR >= 200:1)**: структурированные инварианты трассировок, DSL архитектуры, скелеты AST и шаблоны кластеризации.
+- **Семантический поиск по бюджету токенов**: извлечение фактов жадным рюкзачным алгоритмом 0/1 под строгий лимит токенов (например, 500 токенов).
+
+### Команды CLI для ALMF
+- `python scripts/living_wiki_cli.py pack [INPUT] [-o memory.almf] [--mode auto|trace|arch|code]` — упаковка Markdown-памяти или директории в `.almf`.
+- `python scripts/living_wiki_cli.py unpack memory.almf [-o OUTPUT_DIR]` — распаковка `.almf` с реконструкцией канонических 5 секций `MEMORY.md` и файлов тем в `memory/`.
+- `python scripts/living_wiki_cli.py query memory.almf "<запрос>" [--budget 500]` — поиск фактов под строгий лимит токенов контекста.
+- `python scripts/living_wiki_cli.py stats memory.almf` — анализ структуры контейнера, коэффициентов сжатия и количества сущностей.
+- `python scripts/living_wiki_cli.py migrate {--to-almf|--to-md} [--force]` — безопасная двунаправленная неразрушающая миграция между Markdown и ALMF.
 
 ## Многоагентность и безопасность
 

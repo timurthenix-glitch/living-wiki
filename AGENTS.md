@@ -1,6 +1,6 @@
 ---
 bootstrap_version: v2
-rules_hash: ea9e5c888df0e21856f9a9da464c5bd3641f01a8213cdf10438058b08bdf4541
+rules_hash: 99a4b97901da736a9acbfe276ec195cb8376a35818341a858902e92937445114
 updated: 2026-10-30
 ---
 
@@ -144,3 +144,16 @@ updated: <YYYY-MM-DD>
 
 - **Блокировки и журнал изменений**: При одновременной работе нескольких агентов для предотвращения коллизий (lost updates) используй рекомендательный lock-файл `MEMORY.md.lock` (TTL 15 сек, `python scripts/living_wiki_cli.py lock acquire/release`) либо пиши в журнал с отложенной консолидацией `memory/journal.log` (`python scripts/living_wiki_cli.py journal append`).
 - **Атомарное вытеснение**: Создание или обновление файлов тем в `memory/` и замена фактов на строку-указатель в `MEMORY.md` должны выполняться в строгой последовательности (сначала пишется и проверяется файл темы, затем фиксируется указатель в `MEMORY.md`), чтобы избежать битых ссылок и ошибок `ENOENT`.
+
+## 10. Двухрежимная работа и движок сжатия ALMF
+
+Проект поддерживает два взаимодополняющих режима работы с памятью:
+1. **Текстовый режим Markdown (по умолчанию)**: `MEMORY.md` (до 6000 символов) и плоские файлы тем `memory/<тема>.md`.
+2. **Бинарный режим ALMF (Adaptive Long-term Memory Format)**: ультраплотный контейнер `memory.almf` для долговременного хранения больших объёмов знаний с коэффициентом сжатия >= 200:1 и семантическим поиском фактов под строгий бюджет токенов.
+
+### Команды CLI для ALMF
+- `python scripts/living_wiki_cli.py pack [INPUT] [-o memory.almf]` — упаковка Markdown-памяти в бинарный контейнер ALMF с индексацией SimHash-64.
+- `python scripts/living_wiki_cli.py unpack memory.almf [-o DIR]` — декомпрессия контейнера с полной реконструкцией пяти канонических секций `MEMORY.md` и файлов тем `memory/`.
+- `python scripts/living_wiki_cli.py query memory.almf "<запрос>" --budget 500` — извлечение фактов под строгий лимит токенов контекста.
+- `python scripts/living_wiki_cli.py stats memory.almf` — вывод статистики по 6 бинарным секциям, степеням сжатия и графу знаний.
+- `python scripts/living_wiki_cli.py migrate {--to-almf|--to-md} [--force]` — безопасная двусторонняя неразрушающая миграция (исходные файлы сохраняются).
