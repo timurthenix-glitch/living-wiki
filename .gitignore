@@ -21,6 +21,7 @@ Thumbs.db
 
 # Local memory cache & databases
 .cache/
+.agents/
 *.db
 *.sqlite
 *.sqlite3
