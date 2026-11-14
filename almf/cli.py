@@ -82,7 +82,11 @@ def _cmd_unpack(args: argparse.Namespace) -> int:
         print(f"Error: container file does not exist: {input_path}", file=sys.stderr)
         return 1
 
-    graph = load_from_file(input_path)
+    try:
+        graph = load_from_file(input_path)
+    except Exception as err:
+        print(f"Error: {err}", file=sys.stderr)
+        return 1
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. Export entities.json
@@ -154,7 +158,11 @@ def _cmd_query(args: argparse.Namespace) -> int:
         print(f"Error: container file does not exist: {input_path}", file=sys.stderr)
         return 1
 
-    graph = load_from_file(input_path)
+    try:
+        graph = load_from_file(input_path)
+    except Exception as err:
+        print(f"Error: {err}", file=sys.stderr)
+        return 1
     rendered = render_context(
         graph=graph,
         query=query_str,
@@ -178,20 +186,24 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         return 1
 
     file_size = os.path.getsize(input_path)
-    with open(input_path, "rb") as f:
-        raw_header = f.read(HEADER_SIZE)
-        if len(raw_header) < HEADER_SIZE:
-            print("Error: file is smaller than 32-byte ALMF header", file=sys.stderr)
-            return 1
+    try:
+        with open(input_path, "rb") as f:
+            raw_header = f.read(HEADER_SIZE)
+            if len(raw_header) < HEADER_SIZE:
+                print("Error: file is smaller than 32-byte ALMF header", file=sys.stderr)
+                return 1
 
-        header = ALMFHeader.unpack(raw_header)
-        f.seek(header.section_table_offset)
-        (sec_count,) = struct.unpack("<H", f.read(2))
-        entries: List[SectionEntry] = []
-        for _ in range(sec_count):
-            entries.append(SectionEntry.unpack(f.read(SECTION_ENTRY_SIZE)))
+            header = ALMFHeader.unpack(raw_header)
+            f.seek(header.section_table_offset)
+            (sec_count,) = struct.unpack("<H", f.read(2))
+            entries: List[SectionEntry] = []
+            for _ in range(sec_count):
+                entries.append(SectionEntry.unpack(f.read(SECTION_ENTRY_SIZE)))
 
-    graph = load_from_file(input_path)
+        graph = load_from_file(input_path)
+    except Exception as err:
+        print(f"Error: {err}", file=sys.stderr)
+        return 1
 
     section_names = {
         SectionType.STRING_POOL: "1: String Intern Pool",

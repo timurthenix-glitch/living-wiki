@@ -641,7 +641,11 @@ def cmd_unpack(args):
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    graph = load_from_file(str(input_path))
+    try:
+        graph = load_from_file(str(input_path))
+    except Exception as err:
+        print(f"::error::Failed to unpack ALMF container: {err}", file=sys.stderr)
+        return 1
 
     memory_md_content, topic_files = reconstruct_living_wiki_markdown(graph)
     memory_path = output_dir / "MEMORY.md"
@@ -702,7 +706,12 @@ def cmd_query(args):
     budget = args.budget if getattr(args, "budget", None) is not None else 500
     tokenizer = getattr(args, "tokenizer", "o200k_base") or "o200k_base"
 
-    graph = load_from_file(str(input_path))
+    try:
+        graph = load_from_file(str(input_path))
+    except Exception as err:
+        print(f"::error::Failed to load ALMF container: {err}", file=sys.stderr)
+        return 1
+
     rendered = render_context(
         graph=graph,
         query=args.query,
@@ -731,7 +740,11 @@ def cmd_stats(args):
         return 1
 
     ns = argparse.Namespace(input_path=str(input_path))
-    return almf_stats_cmd(ns)
+    try:
+        return almf_stats_cmd(ns)
+    except Exception as err:
+        print(f"::error::Failed to read ALMF container stats: {err}", file=sys.stderr)
+        return 1
 
 
 def cmd_migrate(args):
@@ -789,7 +802,11 @@ def cmd_migrate(args):
             print(f"::error::Target file already exists: {target_mem}. Use --force to overwrite.", file=sys.stderr)
             return 1
 
-        graph = load_from_file(str(in_path))
+        try:
+            graph = load_from_file(str(in_path))
+        except Exception as err:
+            print(f"::error::Failed to load ALMF container: {err}", file=sys.stderr)
+            return 1
         memory_md_content, topic_files = reconstruct_living_wiki_markdown(graph)
 
         out_dir.mkdir(parents=True, exist_ok=True)

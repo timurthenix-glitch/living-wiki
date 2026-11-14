@@ -5,6 +5,7 @@ Verifies complete remediation of defects DEF-MEM-01 through DEF-AUD-01.
 Standard Library unittest only — zero external dependencies.
 """
 
+import io
 import os
 import re
 import sys
@@ -14,7 +15,9 @@ import shutil
 import hashlib
 import tempfile
 import unittest
+import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 # Add project root to sys.path
 ROOT = Path(__file__).resolve().parent.parent
@@ -518,6 +521,163 @@ class TestALMFEngineIntegration(unittest.TestCase):
         self.assertTrue(self.mem_file.is_file())
         self.assertTrue(self.almf_file.is_file())
         self.assertEqual(cli.cmd_check_size(SizeArgs()), 0)
+
+
+class TestAlmfCorruptedInputHandling(unittest.TestCase):
+    """Verifies that corrupted, truncated, and non-ALMF binary containers fail gracefully.
+
+    Asserts that unpack, stats, query, and migrate --to-md return exit code 1,
+    emit clean error messages to stderr, and never crash with unhandled Python tracebacks.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="test_almf_corrupt_")
+        self.td = Path(self.temp_dir)
+
+        # 1. Truncated header (< 32 bytes)
+        self.truncated_file = self.td / "truncated.almf"
+        self.truncated_file.write_bytes(b"ALMF\x01\x00")
+
+        # 2. Non-ALMF binary (>= 32 bytes)
+        self.non_almf_file = self.td / "non_almf.bin"
+        self.non_almf_file.write_bytes(bytes(range(64)))
+
+        # 3. Valid ALMF container with bit-flipped payload body (CRC32 failure)
+        mem_file = self.td / "sample_mem.md"
+        mem_file.write_text("# Память\n\n## Решения\n- Тестовый факт для CRC.\n", encoding="utf-8")
+        valid_almf = self.td / "valid.almf"
+        class PackArgs:
+            input = str(mem_file)
+            output = str(valid_almf)
+            mode = "auto"
+        cli.cmd_pack(PackArgs())
+
+        valid_bytes = bytearray(valid_almf.read_bytes())
+        flip_pos = min(60, len(valid_bytes) - 5)
+        for i in range(flip_pos, flip_pos + 4):
+            valid_bytes[i] ^= 0xFF
+        self.crc_fail_file = self.td / "crc_fail.almf"
+        self.crc_fail_file.write_bytes(bytes(valid_bytes))
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_unpack_graceful_error_on_corrupted_files(self):
+        """Verifies cmd_unpack returns 1 with ::error:: prefix and no Traceback on corrupted files."""
+        for corrupt_path in [self.truncated_file, self.non_almf_file, self.crc_fail_file]:
+            class UnpackArgs:
+                input = str(corrupt_path)
+                output_dir = str(self.td / "unpack_out")
+                reconstruct_sections = True
+
+            captured_err = io.StringIO()
+            with patch("sys.stderr", captured_err):
+                ret = cli.cmd_unpack(UnpackArgs())
+
+            err_output = captured_err.getvalue()
+            self.assertEqual(ret, 1, f"Expected unpack to return 1 for {corrupt_path.name}")
+            self.assertIn("::error::Failed to unpack ALMF container:", err_output)
+            self.assertNotIn("Traceback", err_output)
+
+    def test_query_graceful_error_on_corrupted_files(self):
+        """Verifies cmd_query returns 1 with ::error:: prefix and no Traceback on corrupted files."""
+        for corrupt_path in [self.truncated_file, self.non_almf_file, self.crc_fail_file]:
+            class QueryArgs:
+                input = str(corrupt_path)
+                query = "test"
+                budget = 500
+                tokenizer = "o200k_base"
+
+            captured_err = io.StringIO()
+            with patch("sys.stderr", captured_err):
+                ret = cli.cmd_query(QueryArgs())
+
+            err_output = captured_err.getvalue()
+            self.assertEqual(ret, 1, f"Expected query to return 1 for {corrupt_path.name}")
+            self.assertIn("::error::Failed to load ALMF container:", err_output)
+            self.assertNotIn("Traceback", err_output)
+
+    def test_stats_graceful_error_on_corrupted_files(self):
+        """Verifies cmd_stats returns 1 with clean error output and no Traceback on corrupted files."""
+        for corrupt_path in [self.truncated_file, self.non_almf_file, self.crc_fail_file]:
+            class StatsArgs:
+                input = str(corrupt_path)
+
+            captured_err = io.StringIO()
+            with patch("sys.stderr", captured_err):
+                ret = cli.cmd_stats(StatsArgs())
+
+            err_output = captured_err.getvalue()
+            self.assertEqual(ret, 1, f"Expected stats to return 1 for {corrupt_path.name}")
+            self.assertTrue(
+                "Error:" in err_output or "::error::" in err_output,
+                f"Expected clean error message for {corrupt_path.name}, got: {err_output}",
+            )
+            self.assertNotIn("Traceback", err_output)
+
+    def test_migrate_to_md_graceful_error_on_corrupted_files(self):
+        """Verifies cmd_migrate --to-md returns 1 with ::error:: prefix and no Traceback on corrupted files."""
+        for corrupt_path in [self.truncated_file, self.non_almf_file, self.crc_fail_file]:
+            class MigArgs:
+                to_almf = False
+                to_md = True
+                input = str(corrupt_path)
+                output = str(self.td / "mig_out")
+                force = True
+
+            captured_err = io.StringIO()
+            with patch("sys.stderr", captured_err):
+                ret = cli.cmd_migrate(MigArgs())
+
+            err_output = captured_err.getvalue()
+            self.assertEqual(ret, 1, f"Expected migrate to return 1 for {corrupt_path.name}")
+            self.assertIn("::error::Failed to load ALMF container:", err_output)
+            self.assertNotIn("Traceback", err_output)
+
+    def test_cli_subprocess_resilience_on_corrupt_file(self):
+        """Subprocess end-to-end verification that CLI invocations return 1 and never emit tracebacks."""
+        cli_py = str(ROOT / "scripts" / "living_wiki_cli.py")
+        corrupt_path = str(self.non_almf_file)
+
+        # 1. unpack
+        p_unpack = subprocess.run(
+            [sys.executable, cli_py, "unpack", corrupt_path, "-o", str(self.td / "sub_unpack")],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(p_unpack.returncode, 1)
+        self.assertIn("::error::", p_unpack.stderr)
+        self.assertNotIn("Traceback", p_unpack.stderr)
+
+        # 2. stats
+        p_stats = subprocess.run(
+            [sys.executable, cli_py, "stats", corrupt_path],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(p_stats.returncode, 1)
+        self.assertTrue("Error:" in p_stats.stderr or "::error::" in p_stats.stderr)
+        self.assertNotIn("Traceback", p_stats.stderr)
+
+        # 3. query
+        p_query = subprocess.run(
+            [sys.executable, cli_py, "query", corrupt_path, "sample"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(p_query.returncode, 1)
+        self.assertIn("::error::", p_query.stderr)
+        self.assertNotIn("Traceback", p_query.stderr)
+
+        # 4. migrate --to-md
+        p_mig = subprocess.run(
+            [sys.executable, cli_py, "migrate", "--to-md", "--input", corrupt_path, "--output", str(self.td / "sub_mig"), "--force"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(p_mig.returncode, 1)
+        self.assertIn("::error::", p_mig.stderr)
+        self.assertNotIn("Traceback", p_mig.stderr)
 
 
 if __name__ == "__main__":
