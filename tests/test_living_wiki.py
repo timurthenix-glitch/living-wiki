@@ -680,5 +680,39 @@ class TestAlmfCorruptedInputHandling(unittest.TestCase):
         self.assertNotIn("Traceback", p_mig.stderr)
 
 
+class TestCheckSizePathResolution(unittest.TestCase):
+    """check-size должен мерить память проекта, а не самого инструмента."""
+
+    def test_def_size_01_relative_path_prefers_cwd(self):
+        """DEF-SIZE-01: относительный MEMORY.md резолвится от текущей папки, а не от корня инструмента."""
+        with tempfile.TemporaryDirectory() as tmp:
+            mem = Path(tmp) / "MEMORY.md"
+            mem.write_text("Ф" * 777, encoding="utf-8")
+
+            class Args:
+                file = "MEMORY.md"
+                profile = "compact"
+
+            old_cwd = os.getcwd()
+            buf = io.StringIO()
+            try:
+                os.chdir(tmp)
+                with patch("sys.stdout", buf):
+                    exit_code = cli.cmd_check_size(Args())
+            finally:
+                os.chdir(old_cwd)
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("777", buf.getvalue())
+            self.assertNotIn("1529", buf.getvalue())
+
+    def test_def_size_02_falls_back_to_root(self):
+        """DEF-SIZE-02: если файла в текущей папке нет, путь берётся от корня инструмента."""
+        self.assertTrue(hasattr(cli, "resolve_memory_path"))
+        resolved = cli.resolve_memory_path("templates/MEMORY.md")
+        self.assertTrue(resolved.is_absolute())
+        self.assertEqual(resolved, cli.ROOT / "templates" / "MEMORY.md")
+
+
 if __name__ == "__main__":
     unittest.main()

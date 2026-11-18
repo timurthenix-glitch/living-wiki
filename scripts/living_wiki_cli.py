@@ -29,6 +29,20 @@ import argparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_memory_path(path_str="MEMORY.md"):
+    """Путь к файлу памяти: относительный ищем сначала в текущей папке, потом в корне.
+
+    Без этого check-size, запущенный из проекта, клеил путь к ROOT и молча мерил
+    MEMORY.md самого инструмента вместо файла проекта.
+    """
+    candidate = Path(path_str)
+    if candidate.is_absolute():
+        return candidate
+    if candidate.exists():
+        return candidate.resolve()
+    return ROOT / candidate
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -238,9 +252,7 @@ def cmd_check_json(args):
 
 
 def cmd_check_size(args):
-    target = Path(args.file) if args.file else ROOT / "MEMORY.md"
-    if not target.is_absolute():
-        target = ROOT / target
+    target = resolve_memory_path(args.file or "MEMORY.md")
 
     if not target.exists():
         print(f"::error::Target file {target} does not exist", file=sys.stderr)
