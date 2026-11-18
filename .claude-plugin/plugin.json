@@ -1,8 +1,8 @@
 {
   "name": "living-wiki",
-  "displayName": "Living Wiki (v2.0.1, rules v2 — ALMF engine integration)",
+  "displayName": "Living Wiki (v2.0.2, rules v2 — ALMF engine integration)",
   "description": "Живая память агента: MEMORY.md с фактами и skills/ с процедурами, плюс нативный движок ультраплотного сжатия памяти ALMF с семантическим поиском по бюджету токенов",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "author": {
     "name": "timurthenix-glitch"
   },
